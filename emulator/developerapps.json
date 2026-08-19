@@ -1,0 +1,26 @@
+[
+  {
+    "name": "starter-ai-app",
+    "displayName": "Starter AI App",
+    "developerEmail": "developer@example.com",
+    "callbackUrl": "",
+    "expiryType": "never",
+    "apiProducts": [
+      "StarterAiProduct"
+    ],
+    "credentials": [
+      {
+        "consumerKey": "test-api-key-12345",
+        "consumerSecret": "test-secret-12345",
+        "apiProducts": [
+          {
+            "apiproduct": "StarterAiProduct",
+            "status": "approved"
+          }
+        ],
+        "status": "approved"
+      }
+    ],
+    "attributes": []
+  }
+]

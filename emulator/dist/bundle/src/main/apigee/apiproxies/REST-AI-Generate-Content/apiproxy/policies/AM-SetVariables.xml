@@ -1,0 +1,11 @@
+<AssignMessage continueOnError="false" enabled="true" name="AM-SetVariables">
+  <DisplayName>AM-SetVariables</DisplayName>
+  <Properties/>
+  <Remove>
+    <Headers>
+      <Header name="accept-encoding"/>
+    </Headers>
+  </Remove>
+  <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+  <AssignTo createNew="false" transport="http" type="request"/>
+</AssignMessage>

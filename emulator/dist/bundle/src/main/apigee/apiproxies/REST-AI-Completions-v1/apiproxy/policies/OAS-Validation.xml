@@ -1,0 +1,8 @@
+<OASValidation continueOnError="false" enabled="true" name="OAS-Validation">
+  <DisplayName>OAS-Validation</DisplayName>
+  <Properties/>
+  <Options>
+    <ValidateMessageBody>true</ValidateMessageBody>
+  </Options>
+  <OASResource>oas://openapi.yaml</OASResource>
+</OASValidation>

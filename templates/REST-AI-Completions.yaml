@@ -1,0 +1,41 @@
+name: REST-AI-Completions
+type: template
+description: API template for REST-AI-Completions
+gateway: apigee
+schemaVersion: 1.0.0
+features:
+  - ../features/ai-pre-validate.yaml
+  - ../features/ai-completions.yaml
+  - ../features/ai-post-analytics.yaml
+parameters:
+  - name: ModelRouting
+    default: "true"
+  - name: ModelRoutingKey
+    default: ModelRoutingText
+endpoints:
+  - name: completions
+    basePath: /v1/chat/completions
+    routes:
+      - name: route-googlecloud
+        target: googlecloud
+        condition: target.route = "googlecloud"
+      - name: route-googlecloud-oai
+        target: googlecloud-oai
+        condition: target.route = "googlecloud-oai"
+      - name: route-openai
+        target: openai
+        condition: target.route = "openai"
+      - name: route-anthropic
+        target: anthropic
+        condition: target.route = "anthropic"
+      - name: default
+        target: googlecloud
+targets:
+  - name: anthropic
+    url: https://api.anthropic.com
+  - name: googlecloud-oai
+    url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/endpoints/openapi/chat/completions
+  - name: googlecloud
+    url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
+  - name: openai
+    url: https://api.openai.com
