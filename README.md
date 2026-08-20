@@ -11,7 +11,8 @@ Welcome to the **Apigee Templates Repository** — an enterprise catalog of modu
 ## Table of Contents
 
 - [Overview & Architecture](#overview--architecture)
-- [Quick Start](#quick-start)
+- [Deploy with Jupyter Notebooks & Google Colab](#deploy-with-jupyter-notebooks--google-colab)
+- [Deploy with gcloud or aft CLI](#deploy-with-gcloud-or-aft-cli)
 - [Released Features](#released-features)
 - [Draft Extension Features (100+)](#draft-extension-features-100)
   - [1. Google Cloud Services](#1-google-cloud-services)
@@ -23,7 +24,6 @@ Welcome to the **Apigee Templates Repository** — an enterprise catalog of modu
   - [7. Security, Identity & Governance](#7-security-identity--governance)
   - [8. Transformation & Protocol Mediation](#8-transformation--protocol-mediation)
   - [9. Traffic Management & Observability](#9-traffic-management--observability)
-- [Deploy with gcloud or aft](#deploy-with-gcloud-or-aft)
 - [Repository Structure](#repository-structure)
 - [Contributing](#contributing)
 - [License](#license)
@@ -63,6 +63,80 @@ flowchart LR
 
 ---
 
+## Deploy with Jupyter Notebooks & Google Colab
+
+Every template and feature in this repository includes a dedicated, runnable **Jupyter Notebook** located in the [`notebooks/`](notebooks/) directory that guides you through every step of configuration, deployment, and live API testing.
+
+### Zero-Setup Managed Execution with Google Colab
+
+You can run and test any feature without installing any local development tools:
+1. Click the **`Open In Colab`** badge next to any feature in the [Released Features](#released-features) or [Draft Features](#draft-extension-features-100) tables below.
+2. Google Colab opens the notebook directly in a managed cloud runtime.
+3. Execute each cell sequentially to authenticate, deploy, and verify the feature.
+
+### Automated Steps in Each Notebook
+
+```mermaid
+flowchart TD
+    A["1. Environment Setup<br/>(Clone repo & install dependencies)"] --> B["2. GCP Authentication<br/>(google.colab.auth / Service Account)"]
+    B --> C["3. Interactive Configuration<br/>(Set Project ID, Org, Env, Host & Secrets)"]
+    C --> D["4. Compile & Bundle<br/>(Validate YAML & generate proxy bundle)"]
+    D --> E["5. Deploy to Apigee<br/>(via gcloud beta apigee or aft)"]
+    E --> F["6. Live Verification<br/>(Execute test requests & validate responses)"]
+```
+
+1. **Environment Setup**: Clones the repository and verifies required Python and CLI utilities.
+2. **Google Cloud Authentication**: Authenticates your Google Cloud account via `google.colab.auth.authenticate_user()` or GCP Service Account key.
+3. **Interactive Configuration Form**: Easily set parameters using Colab form fields:
+   - `GOOGLE_CLOUD_PROJECT` / `APIGEE_ORG`: Your target GCP project ID.
+   - `APIGEE_ENV`: Target environment (e.g., `eval`, `dev`, `prod`).
+   - `APIGEE_HOST`: Hostname of your Apigee environment group (e.g., `api.example.com`).
+   - Target credentials, API keys, or KVM values if required.
+4. **Compilation & Packaging**: Validates the feature YAML and compiles the Apigee proxy bundle.
+5. **Deployment**: Deploys the bundle directly to Apigee using `gcloud` or `aft`.
+6. **Live Testing & Verification**: Sends live HTTP test requests against your deployed Apigee endpoint, printing request details, latency, and response bodies.
+
+### Running Notebooks Locally
+You can also run notebooks locally using VS Code, JupyterLab, or Cursor:
+```bash
+# Clone repository
+git clone https://github.com/GoogleCloudPlatform/apigee-templates-repository.git
+cd apigee-templates-repository
+
+# Launch JupyterLab or VS Code
+jupyter lab notebooks/cloud-run-proxy.ipynb
+```
+
+---
+
+## Deploy with gcloud or aft CLI
+
+### 1. Deploy with `gcloud` (Google Cloud CLI)
+
+You can import and deploy Apigee templates directly using `gcloud beta apigee apis import`:
+
+```bash
+gcloud beta apigee apis import REST-AI-Completions \
+  --from-template=templates/REST-AI-Completions.yaml \
+  --organization="$GOOGLE_CLOUD_PROJECT"
+```
+
+### 2. Deploy with `aft` (Apigee Feature Templater CLI)
+
+For installation and setup of the `aft` CLI, visit the official [Apigee Feature Templater Repository](https://github.com/apigee/apigee-templater).
+
+Deploy using the `-o NAME:ENV:SERVICE_ACCOUNT` option syntax:
+
+```bash
+# Deploy a multi-feature template bundle
+aft templates/REST-AI-Completions.yaml -o $PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
+
+# Or deploy an individual feature definition
+aft features/cloud-run-proxy.yaml -o $PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
+```
+
+---
+
 ## Released Features
 
 Production-ready features available for immediate deployment.
@@ -80,7 +154,7 @@ Production-ready features available for immediate deployment.
 
 ---
 
-## Draft Extension Features
+## Draft Extension Features (100+)
 
 > [!NOTE]
 > All features below carry the `category: draft` tag to indicate that they are in active testing and integration validation. Each feature includes a dedicated Jupyter notebook in [`notebooks/`](notebooks/) that you can open and run directly in Google Colab.
@@ -238,34 +312,6 @@ Production-ready features available for immediate deployment.
 | **`synthetic-health-monitor`** | Provides an automated `/healthz` & `/readyz` endpoint that executes parallel health probes against downstream targets, KVMs, and caches. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GoogleCloudPlatform/apigee-templates-repository/blob/main/notebooks/synthetic-health-monitor.ipynb) |
 | **`mock-faker-service`** | Generates realistic, dynamic mock JSON responses (users, transactions, products, addresses) at the Apigee edge without calling backend targets. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GoogleCloudPlatform/apigee-templates-repository/blob/main/notebooks/mock-faker-service.ipynb) |
 | **`request-replay-recorder`** | Captures failed client requests (HTTP 5xx, timeouts) and forwards the original method, headers, and body to a Google Cloud Pub/Sub DLQ for replay. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/GoogleCloudPlatform/apigee-templates-repository/blob/main/notebooks/request-replay-recorder.ipynb) |
-
----
-
-## Deploy with gcloud or aft
-
-### 1. Deploy with `gcloud` (Google Cloud CLI)
-
-You can import and deploy Apigee templates directly using `gcloud beta apigee apis import`:
-
-```bash
-gcloud beta apigee apis import REST-AI-Completions \
-  --from-template=templates/REST-AI-Completions.yaml \
-  --organization="$GOOGLE_CLOUD_PROJECT"
-```
-
-### 2. Deploy with `aft` (Apigee Feature Templater CLI)
-
-For installation and setup of the `aft` CLI, visit the official [Apigee Feature Templater Repository](https://github.com/apigee/apigee-templater).
-
-Deploy using the `-o NAME:ENV:SERVICE_ACCOUNT` option syntax:
-
-```bash
-# Deploy a multi-feature template bundle
-aft templates/REST-AI-Completions.yaml -o $PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
-
-# Or deploy an individual feature definition
-aft features/cloud-run-proxy.yaml -o $PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
-```
 
 ---
 
