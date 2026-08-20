@@ -10,6 +10,7 @@ endpoints:
         target: anthropic
     flows: []
     faultRules: []
+parameters: []
 targets:
   - name: anthropic
     url: https://api.anthropic.com/v1/messages
