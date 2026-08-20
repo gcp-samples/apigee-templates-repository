@@ -80,7 +80,7 @@ Production-ready features available for immediate deployment.
 
 ---
 
-## Draft Extension Features (100+)
+## Draft Extension Features
 
 > [!NOTE]
 > All features below carry the `category: draft` tag to indicate that they are in active testing and integration validation. Each feature includes a dedicated Jupyter notebook in [`notebooks/`](notebooks/) that you can open and run directly in Google Colab.
