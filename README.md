@@ -126,14 +126,14 @@ gcloud beta apigee apis import REST-AI-Completions \
 
 For installation and setup of the `aft` CLI, visit the official [Apigee Feature Templater Repository](https://github.com/apigee/apigee-templater).
 
-Deploy using the `-o NAME:ENV:SERVICE_ACCOUNT` option syntax:
+Deploy using the `-o ORG:NAME:ENV:SERVICE_ACCOUNT` option syntax:
 
 ```bash
 # Deploy a multi-feature template bundle
-aft templates/REST-AI-Completions.yaml -o $PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
+aft templates/REST-AI-Completions.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
 
 # Or deploy an individual feature definition
-aft features/cloud-run-proxy.yaml -o $PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
+aft features/cloud-run-proxy.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
 ```
 
 ---
