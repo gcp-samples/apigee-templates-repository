@@ -1,0 +1,116 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: replicate-predictions-proxy
+displayName: Replicate ML Predictions Dispatcher
+type: feature
+description: Dispatches machine learning model predictions to Replicate REST API with Bearer token authentication, webhook
+  URL attachment, and status polling.
+categories:
+- draft
+- ai
+parameters:
+- name: TargetEndpointUrl
+  default: https://api.replicate.com/v1/predictions
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/replicate/predictions
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetReplicateAuth
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatReplicateResponse
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://api.replicate.com/v1/predictions
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://api.replicate.com/v1/predictions
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: replicate-predictions-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: AM-SetReplicateAuth
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetReplicateAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetReplicateAuth
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: replicate-predictions-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatReplicateResponse
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatReplicateResponse
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatReplicateResponse
+      properties: {}
+      source: "// JS-FormatReplicateResponse - Custom logic for replicate-predictions-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"replicate-predictions-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"replicate-predictions-proxy.timestamp\", Date.now().toString());\n    \n \
+        \   // Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n\
+        \    if (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"replicate-predictions-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatReplicateResponse: \" + err);\n}\n"
+resources: []
+tests: []

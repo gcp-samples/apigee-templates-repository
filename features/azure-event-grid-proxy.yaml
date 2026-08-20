@@ -1,0 +1,116 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: azure-event-grid-proxy
+displayName: Azure Event Grid CloudEvents Publisher
+type: feature
+description: Publishes CloudEvents 1.0 compliant JSON events to Azure Event Grid topics with SAS key or token authentication.
+categories:
+- draft
+- azure
+parameters:
+- name: TargetEndpointUrl
+  default: https://{azure.egTopic}.{azure.location}-1.eventgrid.azure.net/api/events
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/azure/eventgrid/publish
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: JS-FormatCloudEvent
+    - name: AM-SetEventGridKey
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatCloudEvent
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{azure.egTopic}.{azure.location}-1.eventgrid.azure.net/api/events
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://{azure.egTopic}.{azure.location}-1.eventgrid.azure.net/api/events
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: azure-event-grid-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: JS-FormatCloudEvent
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatCloudEvent
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatCloudEvent
+      properties: {}
+      source: "// JS-FormatCloudEvent - Custom logic for azure-event-grid-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"azure-event-grid-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"azure-event-grid-proxy.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"azure-event-grid-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatCloudEvent: \" + err);\n}\n"
+- name: AM-SetEventGridKey
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetEventGridKey
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetEventGridKey
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: azure-event-grid-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

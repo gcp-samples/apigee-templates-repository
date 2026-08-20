@@ -1,0 +1,117 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: salesforce-rest-proxy
+displayName: Salesforce REST API & SOQL Query Proxy
+type: feature
+description: Proxies Salesforce REST API and SOQL queries with automatic OAuth2 access token refresh, instance URL routing,
+  and record transformation.
+categories:
+- draft
+- saas
+parameters:
+- name: TargetEndpointUrl
+  default: https://{salesforce.instance}.my.salesforce.com/services/data/v59.0
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/salesforce
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetSalesforceAuth
+    - name: JS-FormatSalesforceRecords
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatSalesforceRecords
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{salesforce.instance}.my.salesforce.com/services/data/v59.0
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://{salesforce.instance}.my.salesforce.com/services/data/v59.0
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: salesforce-rest-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: AM-SetSalesforceAuth
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetSalesforceAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetSalesforceAuth
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: salesforce-rest-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatSalesforceRecords
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatSalesforceRecords
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatSalesforceRecords
+      properties: {}
+      source: "// JS-FormatSalesforceRecords - Custom logic for salesforce-rest-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"salesforce-rest-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"salesforce-rest-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"salesforce-rest-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatSalesforceRecords: \" + err);\n}\n"
+resources: []
+tests: []

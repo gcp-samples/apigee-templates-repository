@@ -6,6 +6,7 @@ documentation: ""
 gateway: apigee
 schemaVersion: 1.0.0
 categories:
+  - draft
   - validation
   - security
   - governance

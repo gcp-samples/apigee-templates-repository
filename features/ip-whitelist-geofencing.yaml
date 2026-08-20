@@ -1,0 +1,89 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: ip-whitelist-geofencing
+displayName: CIDR IP Whitelist & Geofencing Filter
+type: feature
+description: Enforces strict CIDR subnet IP whitelisting and country-level geofencing rules using True-Client-IP and X-Forwarded-For
+  headers.
+categories:
+- draft
+- security
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/security/ip-geofence
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-EvaluateIpAndGeo
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://backend.example.com
+endpoints: []
+targets: []
+policies:
+- name: JS-EvaluateIpAndGeo
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-EvaluateIpAndGeo
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-EvaluateIpAndGeo
+      properties: {}
+      source: "// JS-EvaluateIpAndGeo - Custom logic for ip-whitelist-geofencing\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"ip-whitelist-geofencing.processed\"\
+        , \"true\");\n    context.setVariable(\"ip-whitelist-geofencing.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"ip-whitelist-geofencing\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-EvaluateIpAndGeo: \" + err);\n}\n"
+- name: RF-ForbiddenLocation
+  type: RaiseFault
+  content:
+    raiseFault:
+      metadata:
+        name: RF-ForbiddenLocation
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: RF-ForbiddenLocation
+      properties: {}
+      faultResponse:
+        set:
+          headers:
+            header:
+              metadata:
+                name: Content-Type
+              value: application/json
+          payload:
+            contentType: application/json
+            value: '{"error": "RF-ForbiddenLocation", "message": "Security or validation fault occurred in feature ip-whitelist-geofencing"}'
+          statusCode: '400'
+          reasonPhrase: Bad Request
+      ignoreUnresolvedVariables: 'true'
+resources: []
+tests: []

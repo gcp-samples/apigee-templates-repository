@@ -1,0 +1,92 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: api-version-mediator
+displayName: API Versioning & Deprecation Notice Injector
+type: feature
+description: 'Normalizes API versioning across Header (`Accept-Version: v2`), Query (`?v=2`), and Path (`/v2/`), injecting
+  Sunset & Deprecation RFC 8594 headers.'
+categories:
+- draft
+- transformation
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/integration/versioning
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-EvaluateApiVersion
+    - name: AM-SetDeprecationHeaders
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://backend.example.com
+endpoints: []
+targets: []
+policies:
+- name: JS-EvaluateApiVersion
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-EvaluateApiVersion
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-EvaluateApiVersion
+      properties: {}
+      source: "// JS-EvaluateApiVersion - Custom logic for api-version-mediator\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"api-version-mediator.processed\"\
+        , \"true\");\n    context.setVariable(\"api-version-mediator.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"api-version-mediator\",\n                \"processedAt\": new Date().toISOString()\n \
+        \           };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-EvaluateApiVersion: \" + err);\n}\n"
+- name: AM-SetDeprecationHeaders
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetDeprecationHeaders
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetDeprecationHeaders
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: api-version-mediator
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

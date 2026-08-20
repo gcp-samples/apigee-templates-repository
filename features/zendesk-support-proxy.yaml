@@ -1,0 +1,116 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: zendesk-support-proxy
+displayName: Zendesk Support Tickets API Proxy
+type: feature
+description: Proxies Zendesk Support REST API v2 for ticket creation, comments, and user management with API token authentication.
+categories:
+- draft
+- saas
+parameters:
+- name: TargetEndpointUrl
+  default: https://{zendesk.subdomain}.zendesk.com/api/v2
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/zendesk/api
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetZendeskAuth
+    - name: JS-FormatZendeskTickets
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatZendeskTickets
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{zendesk.subdomain}.zendesk.com/api/v2
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://{zendesk.subdomain}.zendesk.com/api/v2
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: zendesk-support-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: AM-SetZendeskAuth
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetZendeskAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetZendeskAuth
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: zendesk-support-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatZendeskTickets
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatZendeskTickets
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatZendeskTickets
+      properties: {}
+      source: "// JS-FormatZendeskTickets - Custom logic for zendesk-support-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"zendesk-support-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"zendesk-support-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"zendesk-support-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatZendeskTickets: \" + err);\n}\n"
+resources: []
+tests: []

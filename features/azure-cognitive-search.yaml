@@ -1,0 +1,117 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: azure-cognitive-search
+displayName: Azure AI Search Query & Indexing Proxy
+type: feature
+description: Proxies Azure AI Search (formerly Cognitive Search) index querying and document updates with api-key authentication
+  and result formatting.
+categories:
+- draft
+- azure
+parameters:
+- name: TargetEndpointUrl
+  default: https://{azure.searchService}.search.windows.net/indexes/{azure.searchIndex}/docs/search?api-version=2024-05-01-preview
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/azure/search
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetAzureSearchKey
+    - name: JS-FormatSearchResults
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatSearchResults
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{azure.searchService}.search.windows.net/indexes/{azure.searchIndex}/docs/search?api-version=2024-05-01-preview
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://{azure.searchService}.search.windows.net/indexes/{azure.searchIndex}/docs/search?api-version=2024-05-01-preview
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: azure-cognitive-search-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: AM-SetAzureSearchKey
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetAzureSearchKey
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetAzureSearchKey
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: azure-cognitive-search
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatSearchResults
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatSearchResults
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatSearchResults
+      properties: {}
+      source: "// JS-FormatSearchResults - Custom logic for azure-cognitive-search\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"azure-cognitive-search.processed\"\
+        , \"true\");\n    context.setVariable(\"azure-cognitive-search.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"azure-cognitive-search\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatSearchResults: \" + err);\n}\n"
+resources: []
+tests: []

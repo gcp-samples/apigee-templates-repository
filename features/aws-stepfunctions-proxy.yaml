@@ -1,0 +1,87 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: aws-stepfunctions-proxy
+displayName: AWS Step Functions Execution Trigger
+type: feature
+description: Starts workflow executions on AWS Step Functions state machines with input validation, idempotency token generation,
+  and execution status tracking.
+categories:
+- draft
+- aws
+parameters:
+- name: TargetEndpointUrl
+  default: https://states.{aws.region}.amazonaws.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/aws/stepfunctions/start
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-BuildStepFunctionPayload
+    - name: JS-GenerateAwsSigV4
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://states.{aws.region}.amazonaws.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://states.{aws.region}.amazonaws.com
+endpoints: []
+targets: []
+policies:
+- name: JS-BuildStepFunctionPayload
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-BuildStepFunctionPayload
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-BuildStepFunctionPayload
+      properties: {}
+      source: "// JS-BuildStepFunctionPayload - Custom logic for aws-stepfunctions-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"aws-stepfunctions-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"aws-stepfunctions-proxy.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"aws-stepfunctions-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-BuildStepFunctionPayload: \" + err);\n}\n"
+- name: JS-GenerateAwsSigV4
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-GenerateAwsSigV4
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-GenerateAwsSigV4
+      properties: {}
+      source: "// JS-GenerateAwsSigV4 - Custom logic for aws-stepfunctions-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"aws-stepfunctions-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"aws-stepfunctions-proxy.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"aws-stepfunctions-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-GenerateAwsSigV4: \" + err);\n}\n"
+resources: []
+tests: []

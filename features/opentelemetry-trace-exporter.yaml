@@ -1,0 +1,112 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: opentelemetry-trace-exporter
+displayName: OpenTelemetry W3C TraceContext Exporter
+type: feature
+description: Propagates W3C TraceContext (`traceparent`, `tracestate`) headers and exports distributed span telemetry to an
+  OpenTelemetry collector.
+categories:
+- draft
+- observability
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/telemetry/otel-trace
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-GenerateOtelSpan
+    - name: AM-InjectTraceparentHeader
+    - name: SC-ExportOtelSpan
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://backend.example.com
+endpoints: []
+targets: []
+policies:
+- name: JS-GenerateOtelSpan
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-GenerateOtelSpan
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-GenerateOtelSpan
+      properties: {}
+      source: "// JS-GenerateOtelSpan - Custom logic for opentelemetry-trace-exporter\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"opentelemetry-trace-exporter.processed\"\
+        , \"true\");\n    context.setVariable(\"opentelemetry-trace-exporter.timestamp\", Date.now().toString());\n    \n\
+        \    // Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n\
+        \    if (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"opentelemetry-trace-exporter\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-GenerateOtelSpan: \" + err);\n}\n"
+- name: AM-InjectTraceparentHeader
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-InjectTraceparentHeader
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-InjectTraceparentHeader
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: opentelemetry-trace-exporter
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: SC-ExportOtelSpan
+  type: ServiceCallout
+  content:
+    serviceCallout:
+      metadata:
+        name: SC-ExportOtelSpan
+        continueOnError: 'true'
+        enabled: 'true'
+      displayName: SC-ExportOtelSpan
+      properties: {}
+      request:
+        metadata:
+          clearPayload: 'false'
+          variable: SC-ExportOtelSpanRequest
+        ignoreUnresolvedVariables: 'true'
+      response: SC-ExportOtelSpanResponse
+      httpTargetConnection:
+        properties: {}
+        url: https://httpbin.org/anything
+resources: []
+tests: []

@@ -1,0 +1,66 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: response-field-masker
+displayName: Dynamic Response Field Masker & Projector
+type: feature
+description: Implements client-driven sparse fieldsets (`?fields=id,name,email,address.city`) to filter and mask large JSON
+  response objects at the gateway.
+categories:
+- draft
+- transformation
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com/users
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/integration/field-mask
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps: []
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-MaskResponseFields
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com/users
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://backend.example.com/users
+endpoints: []
+targets: []
+policies:
+- name: JS-MaskResponseFields
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-MaskResponseFields
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-MaskResponseFields
+      properties: {}
+      source: "// JS-MaskResponseFields - Custom logic for response-field-masker\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"response-field-masker.processed\"\
+        , \"true\");\n    context.setVariable(\"response-field-masker.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"response-field-masker\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-MaskResponseFields: \" + err);\n}\n"
+resources: []
+tests: []

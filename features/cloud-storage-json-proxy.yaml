@@ -1,0 +1,70 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: cloud-storage-json-proxy
+displayName: Cloud Storage (GCS) JSON Gateway
+type: feature
+description: Proxies Google Cloud Storage JSON API for bucket/object listing, metadata inspection, and authenticated pre-signed
+  URL delegation.
+categories:
+- draft
+- gcp
+parameters:
+- name: TargetEndpointUrl
+  default: https://storage.googleapis.com/storage/v1/b
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/storage
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-CleanGcsMetadata
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://storage.googleapis.com/storage/v1/b
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://storage.googleapis.com/storage/v1/b
+    authentication:
+      googleAccessToken:
+        scopes:
+          scope: https://www.googleapis.com/auth/cloud-platform
+endpoints: []
+targets: []
+policies:
+- name: JS-CleanGcsMetadata
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-CleanGcsMetadata
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-CleanGcsMetadata
+      properties: {}
+      source: "// JS-CleanGcsMetadata - Custom logic for cloud-storage-json-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"cloud-storage-json-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"cloud-storage-json-proxy.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"cloud-storage-json-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-CleanGcsMetadata: \" + err);\n}\n"
+resources: []
+tests: []

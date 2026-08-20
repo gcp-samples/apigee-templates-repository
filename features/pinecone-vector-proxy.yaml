@@ -1,0 +1,117 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: pinecone-vector-proxy
+displayName: Pinecone Vector Database Proxy
+type: feature
+description: Proxies Pinecone Vector DB REST API for vector upserts, semantic similarity queries, and namespace filtering
+  with Api-Key header injection.
+categories:
+- draft
+- ai
+parameters:
+- name: TargetEndpointUrl
+  default: https://{pinecone.indexHost}
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/pinecone
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetPineconeKey
+    - name: JS-FormatPineconeMatches
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatPineconeMatches
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{pinecone.indexHost}
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://{pinecone.indexHost}
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: pinecone-vector-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: AM-SetPineconeKey
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetPineconeKey
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetPineconeKey
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: pinecone-vector-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatPineconeMatches
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatPineconeMatches
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatPineconeMatches
+      properties: {}
+      source: "// JS-FormatPineconeMatches - Custom logic for pinecone-vector-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"pinecone-vector-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"pinecone-vector-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"pinecone-vector-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatPineconeMatches: \" + err);\n}\n"
+resources: []
+tests: []

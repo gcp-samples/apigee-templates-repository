@@ -1,0 +1,113 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: soap-to-rest-translator
+displayName: SOAP XML to REST JSON Translator
+type: feature
+description: Transforms clean incoming REST JSON requests into legacy SOAP 1.1/1.2 XML Envelopes with XML namespaces, and
+  parses SOAP responses back to JSON.
+categories:
+- draft
+- transformation
+parameters:
+- name: TargetEndpointUrl
+  default: https://soap-backend.internal/ws/CustomerService
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/integration/soap-service
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-JsonToSoapXml
+    - name: AM-SetSoapHeaders
+    - name: JS-SoapXmlToJson
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://soap-backend.internal/ws/CustomerService
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://soap-backend.internal/ws/CustomerService
+endpoints: []
+targets: []
+policies:
+- name: JS-JsonToSoapXml
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-JsonToSoapXml
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-JsonToSoapXml
+      properties: {}
+      source: "// JS-JsonToSoapXml - Custom logic for soap-to-rest-translator\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"soap-to-rest-translator.processed\"\
+        , \"true\");\n    context.setVariable(\"soap-to-rest-translator.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"soap-to-rest-translator\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-JsonToSoapXml: \" + err);\n}\n"
+- name: AM-SetSoapHeaders
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetSoapHeaders
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetSoapHeaders
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: soap-to-rest-translator
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-SoapXmlToJson
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-SoapXmlToJson
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-SoapXmlToJson
+      properties: {}
+      source: "// JS-SoapXmlToJson - Custom logic for soap-to-rest-translator\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"soap-to-rest-translator.processed\"\
+        , \"true\");\n    context.setVariable(\"soap-to-rest-translator.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"soap-to-rest-translator\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-SoapXmlToJson: \" + err);\n}\n"
+resources: []
+tests: []

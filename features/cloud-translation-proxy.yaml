@@ -1,0 +1,70 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: cloud-translation-proxy
+displayName: Cloud Translation Multi-Language Proxy
+type: feature
+description: Proxies Google Cloud Translation v3 API with source language auto-detection, response caching, and simplified
+  string array output.
+categories:
+- draft
+- gcp
+parameters:
+- name: TargetEndpointUrl
+  default: https://translation.googleapis.com/v3/projects/{organization.name}:translateText
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/translate
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps: []
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatTranslationResponse
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://translation.googleapis.com/v3/projects/{organization.name}:translateText
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://translation.googleapis.com/v3/projects/{organization.name}:translateText
+    authentication:
+      googleAccessToken:
+        scopes:
+          scope: https://www.googleapis.com/auth/cloud-platform
+endpoints: []
+targets: []
+policies:
+- name: JS-FormatTranslationResponse
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatTranslationResponse
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatTranslationResponse
+      properties: {}
+      source: "// JS-FormatTranslationResponse - Custom logic for cloud-translation-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"cloud-translation-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"cloud-translation-proxy.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"cloud-translation-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatTranslationResponse: \" + err);\n}\n"
+resources: []
+tests: []

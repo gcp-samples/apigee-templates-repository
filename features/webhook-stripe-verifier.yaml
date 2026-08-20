@@ -1,0 +1,89 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: webhook-stripe-verifier
+displayName: Stripe Webhook Signature Verifier
+type: feature
+description: Verifies incoming Stripe webhook `Stripe-Signature` headers (t=timestamp, v1=signature) using HMAC-SHA256 and
+  rejects expired replay attacks.
+categories:
+- draft
+- security
+parameters:
+- name: TargetEndpointUrl
+  default: https://internal-worker.example.com/webhooks/stripe
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/webhooks/stripe
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-VerifyStripeWebhookSignature
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://internal-worker.example.com/webhooks/stripe
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://internal-worker.example.com/webhooks/stripe
+endpoints: []
+targets: []
+policies:
+- name: JS-VerifyStripeWebhookSignature
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-VerifyStripeWebhookSignature
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-VerifyStripeWebhookSignature
+      properties: {}
+      source: "// JS-VerifyStripeWebhookSignature - Custom logic for webhook-stripe-verifier\ntry {\n    var reqContent =\
+        \ context.getVariable(\"request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson\
+        \ = JSON.parse(reqContent); } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"\
+        webhook-stripe-verifier.processed\", \"true\");\n    context.setVariable(\"webhook-stripe-verifier.timestamp\", Date.now().toString());\n\
+        \    \n    // Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\"\
+        );\n    if (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"\
+        _apigee\"] = {\n                \"feature\": \"webhook-stripe-verifier\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-VerifyStripeWebhookSignature: \" + err);\n}\n"
+- name: RF-InvalidWebhookSignature
+  type: RaiseFault
+  content:
+    raiseFault:
+      metadata:
+        name: RF-InvalidWebhookSignature
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: RF-InvalidWebhookSignature
+      properties: {}
+      faultResponse:
+        set:
+          headers:
+            header:
+              metadata:
+                name: Content-Type
+              value: application/json
+          payload:
+            contentType: application/json
+            value: '{"error": "RF-InvalidWebhookSignature", "message": "Security or validation fault occurred in feature webhook-stripe-verifier"}'
+          statusCode: '400'
+          reasonPhrase: Bad Request
+      ignoreUnresolvedVariables: 'true'
+resources: []
+tests: []

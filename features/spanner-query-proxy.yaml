@@ -1,0 +1,97 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: spanner-query-proxy
+displayName: Google Cloud Spanner SQL REST Proxy
+type: feature
+description: Executes SQL statements on Google Cloud Spanner instances via REST API with result set row-to-object JSON mapping
+  and transaction handling.
+categories:
+- draft
+- gcp
+parameters:
+- name: TargetEndpointUrl
+  default: https://spanner.googleapis.com/v1/projects/{organization.name}/instances/{spanner.instance}/databases/{spanner.database}/sessions:executeSql
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/spanner/query
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-FormatSpannerRows
+    - name: AM-SetSpannerSession
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatSpannerRows
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://spanner.googleapis.com/v1/projects/{organization.name}/instances/{spanner.instance}/databases/{spanner.database}/sessions:executeSql
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://spanner.googleapis.com/v1/projects/{organization.name}/instances/{spanner.instance}/databases/{spanner.database}/sessions:executeSql
+    authentication:
+      googleAccessToken:
+        scopes:
+          scope: https://www.googleapis.com/auth/cloud-platform
+endpoints: []
+targets: []
+policies:
+- name: JS-FormatSpannerRows
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatSpannerRows
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatSpannerRows
+      properties: {}
+      source: "// JS-FormatSpannerRows - Custom logic for spanner-query-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"spanner-query-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"spanner-query-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"spanner-query-proxy\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatSpannerRows: \" + err);\n}\n"
+- name: AM-SetSpannerSession
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetSpannerSession
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetSpannerSession
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: spanner-query-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

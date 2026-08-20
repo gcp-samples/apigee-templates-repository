@@ -1,0 +1,70 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: cloud-tasks-queue
+displayName: Cloud Tasks Task Dispatcher
+type: feature
+description: Schedules and dispatches background tasks via Google Cloud Tasks with payload serialization, schedule time delay,
+  and queue routing.
+categories:
+- draft
+- gcp
+parameters:
+- name: TargetEndpointUrl
+  default: https://cloudtasks.googleapis.com/v2/projects/{organization.name}/locations/{tasks.location}/queues/{tasks.queue}/tasks
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/tasks/dispatch
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-BuildCloudTaskPayload
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://cloudtasks.googleapis.com/v2/projects/{organization.name}/locations/{tasks.location}/queues/{tasks.queue}/tasks
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://cloudtasks.googleapis.com/v2/projects/{organization.name}/locations/{tasks.location}/queues/{tasks.queue}/tasks
+    authentication:
+      googleAccessToken:
+        scopes:
+          scope: https://www.googleapis.com/auth/cloud-platform
+endpoints: []
+targets: []
+policies:
+- name: JS-BuildCloudTaskPayload
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-BuildCloudTaskPayload
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-BuildCloudTaskPayload
+      properties: {}
+      source: "// JS-BuildCloudTaskPayload - Custom logic for cloud-tasks-queue\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"cloud-tasks-queue.processed\"\
+        , \"true\");\n    context.setVariable(\"cloud-tasks-queue.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"cloud-tasks-queue\",\n                \"processedAt\": new Date().toISOString()\n    \
+        \        };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-BuildCloudTaskPayload: \" + err);\n}\n"
+resources: []
+tests: []

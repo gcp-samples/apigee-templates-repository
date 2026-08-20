@@ -1,0 +1,96 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: cloud-pubsub-publisher
+displayName: Cloud Pub/Sub Message Publisher
+type: feature
+description: Ingests incoming JSON events, encodes payloads to base64, attaches dynamic message attributes, and publishes
+  them to Google Cloud Pub/Sub topics.
+categories:
+- draft
+- gcp
+parameters:
+- name: TargetEndpointUrl
+  default: https://pubsub.googleapis.com/v1/projects/{organization.name}/topics/{pubsub.topic}:publish
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/pubsub/publish
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-EncodePubSubPayload
+    - name: AM-SetPubSubTopic
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://pubsub.googleapis.com/v1/projects/{organization.name}/topics/{pubsub.topic}:publish
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://pubsub.googleapis.com/v1/projects/{organization.name}/topics/{pubsub.topic}:publish
+    authentication:
+      googleAccessToken:
+        scopes:
+          scope: https://www.googleapis.com/auth/cloud-platform
+endpoints: []
+targets: []
+policies:
+- name: JS-EncodePubSubPayload
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-EncodePubSubPayload
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-EncodePubSubPayload
+      properties: {}
+      source: "// JS-EncodePubSubPayload - Custom logic for cloud-pubsub-publisher\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"cloud-pubsub-publisher.processed\"\
+        , \"true\");\n    context.setVariable(\"cloud-pubsub-publisher.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"cloud-pubsub-publisher\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-EncodePubSubPayload: \" + err);\n}\n"
+- name: AM-SetPubSubTopic
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetPubSubTopic
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetPubSubTopic
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: cloud-pubsub-publisher
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

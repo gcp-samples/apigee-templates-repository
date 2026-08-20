@@ -1,0 +1,73 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: rate-limit-dynamic-kvm
+displayName: Dynamic Tiered Rate Limiter with KVM Quota
+type: feature
+description: Enforces dynamic per-minute and per-day rate limits resolved dynamically from KVM based on consumer plan (Bronze,
+  Silver, Gold, Platinum).
+categories:
+- draft
+- traffic
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/traffic/dynamic-rate-limit
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadTierQuota
+    - name: Quota-EnforceTierLimit
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://backend.example.com
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadTierQuota
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: KVM-LoadTierQuota
+        continueOnError: 'true'
+        enabled: 'true'
+      displayName: KVM-LoadTierQuota
+      properties: {}
+      assignVariable:
+        name: rate-limit-dynamic-kvm.trafficState
+        value: healthy
+- name: Quota-EnforceTierLimit
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: Quota-EnforceTierLimit
+        continueOnError: 'true'
+        enabled: 'true'
+      displayName: Quota-EnforceTierLimit
+      properties: {}
+      assignVariable:
+        name: rate-limit-dynamic-kvm.trafficState
+        value: healthy
+resources: []
+tests: []

@@ -1,0 +1,116 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: workday-raas-proxy
+displayName: Workday Report-as-a-Service (RaaS) Proxy
+type: feature
+description: Proxies Workday RaaS endpoints with ISU (Integration System User) credentials, XML-to-JSON reporting conversion,
+  and pagination.
+categories:
+- draft
+- saas
+parameters:
+- name: TargetEndpointUrl
+  default: https://{workday.host}/ccx/service/customreport2/{workday.tenant}/{workday.user}
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/workday/raas
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetWorkdayAuth
+    - name: JS-ConvertWorkdayXmlToJson
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{workday.host}/ccx/service/customreport2/{workday.tenant}/{workday.user}
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://{workday.host}/ccx/service/customreport2/{workday.tenant}/{workday.user}
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: workday-raas-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: AM-SetWorkdayAuth
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetWorkdayAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetWorkdayAuth
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: workday-raas-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-ConvertWorkdayXmlToJson
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-ConvertWorkdayXmlToJson
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-ConvertWorkdayXmlToJson
+      properties: {}
+      source: "// JS-ConvertWorkdayXmlToJson - Custom logic for workday-raas-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"workday-raas-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"workday-raas-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"workday-raas-proxy\",\n                \"processedAt\": new Date().toISOString()\n   \
+        \         };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-ConvertWorkdayXmlToJson: \" + err);\n}\n"
+resources: []
+tests: []

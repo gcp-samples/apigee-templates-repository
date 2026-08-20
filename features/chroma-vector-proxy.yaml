@@ -1,0 +1,117 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: chroma-vector-proxy
+displayName: Chroma Vector Database REST Proxy
+type: feature
+description: Proxies Chroma Open-Source / Hosted Vector DB REST API v1 for collection querying, embedding storage, and metadata
+  filtering.
+categories:
+- draft
+- ai
+parameters:
+- name: TargetEndpointUrl
+  default: https://{chroma.host}/api/v1/collections/{chroma.collectionId}/query
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/chroma
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetChromaAuth
+    - name: JS-FormatChromaQueryResults
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatChromaQueryResults
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{chroma.host}/api/v1/collections/{chroma.collectionId}/query
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://{chroma.host}/api/v1/collections/{chroma.collectionId}/query
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: chroma-vector-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: AM-SetChromaAuth
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetChromaAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetChromaAuth
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: chroma-vector-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatChromaQueryResults
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatChromaQueryResults
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatChromaQueryResults
+      properties: {}
+      source: "// JS-FormatChromaQueryResults - Custom logic for chroma-vector-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"chroma-vector-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"chroma-vector-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"chroma-vector-proxy\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatChromaQueryResults: \" + err);\n}\n"
+resources: []
+tests: []

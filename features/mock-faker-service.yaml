@@ -1,0 +1,54 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: mock-faker-service
+displayName: Dynamic Edge Mock Engine with Faker Generation
+type: feature
+description: Generates realistic, dynamic mock JSON responses (users, transactions, products, addresses) at the Apigee edge
+  without calling backend targets.
+categories:
+- draft
+- traffic
+parameters:
+- name: TargetEndpointUrl
+  default: none
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/mock/engine
+  routes:
+  - name: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-GenerateMockData
+  - name: PostFlow
+    mode: Response
+    steps: []
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-GenerateMockData
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-GenerateMockData
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-GenerateMockData
+      properties: {}
+      source: "// JS-GenerateMockData - Custom logic for mock-faker-service\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"mock-faker-service.processed\"\
+        , \"true\");\n    context.setVariable(\"mock-faker-service.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"mock-faker-service\",\n                \"processedAt\": new Date().toISOString()\n   \
+        \         };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-GenerateMockData: \" + err);\n}\n"
+resources: []
+tests: []

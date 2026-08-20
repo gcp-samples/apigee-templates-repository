@@ -1,0 +1,82 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: spike-arrest-burst-smoother
+displayName: Spike Arrest & Concurrency Burst Smoother
+type: feature
+description: Protects backend microservices from sudden traffic spikes and DDoS surges using Apigee SpikeArrest and ConcurrentRateLimit
+  policies.
+categories:
+- draft
+- traffic
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/traffic/spike-arrest
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: Spike-Arrest-Policy
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://backend.example.com
+endpoints: []
+targets: []
+policies:
+- name: Spike-Arrest-Policy
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: Spike-Arrest-Policy
+        continueOnError: 'true'
+        enabled: 'true'
+      displayName: Spike-Arrest-Policy
+      properties: {}
+      assignVariable:
+        name: spike-arrest-burst-smoother.trafficState
+        value: healthy
+- name: RF-SpikeArrestExceeded
+  type: RaiseFault
+  content:
+    raiseFault:
+      metadata:
+        name: RF-SpikeArrestExceeded
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: RF-SpikeArrestExceeded
+      properties: {}
+      faultResponse:
+        set:
+          headers:
+            header:
+              metadata:
+                name: Content-Type
+              value: application/json
+          payload:
+            contentType: application/json
+            value: '{"error": "RF-SpikeArrestExceeded", "message": "Security or validation fault occurred in feature spike-arrest-burst-smoother"}'
+          statusCode: '400'
+          reasonPhrase: Bad Request
+      ignoreUnresolvedVariables: 'true'
+resources: []
+tests: []

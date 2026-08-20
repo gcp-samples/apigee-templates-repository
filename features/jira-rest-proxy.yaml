@@ -1,0 +1,117 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: jira-rest-proxy
+displayName: Atlassian Jira Cloud REST API Proxy
+type: feature
+description: Proxies Atlassian Jira Cloud REST API v3 for issue creation, JQL search, and sprint updates with Basic Auth /
+  API token injection.
+categories:
+- draft
+- saas
+parameters:
+- name: TargetEndpointUrl
+  default: https://{jira.domain}.atlassian.net/rest/api/3
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/jira
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetJiraAuth
+    - name: JS-FormatJiraIssues
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatJiraIssues
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{jira.domain}.atlassian.net/rest/api/3
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://{jira.domain}.atlassian.net/rest/api/3
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: jira-rest-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: AM-SetJiraAuth
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetJiraAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetJiraAuth
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: jira-rest-proxy
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatJiraIssues
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatJiraIssues
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatJiraIssues
+      properties: {}
+      source: "// JS-FormatJiraIssues - Custom logic for jira-rest-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"jira-rest-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"jira-rest-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"jira-rest-proxy\",\n                \"processedAt\": new Date().toISOString()\n      \
+        \      };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2) {}\n\
+        \    }\n} catch (err) {\n    print(\"Error in JS-FormatJiraIssues: \" + err);\n}\n"
+resources: []
+tests: []

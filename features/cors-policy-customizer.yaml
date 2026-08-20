@@ -1,0 +1,92 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: cors-policy-customizer
+displayName: Dynamic CORS Policy Customizer
+type: feature
+description: Handles CORS preflight OPTIONS requests dynamically with multi-origin regex allowlists, custom allowed headers,
+  and credentials forwarding.
+categories:
+- draft
+- security
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/security/cors-proxy
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-EvaluateCorsOrigin
+    - name: AM-SetCorsHeaders
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://backend.example.com
+endpoints: []
+targets: []
+policies:
+- name: JS-EvaluateCorsOrigin
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-EvaluateCorsOrigin
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-EvaluateCorsOrigin
+      properties: {}
+      source: "// JS-EvaluateCorsOrigin - Custom logic for cors-policy-customizer\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"cors-policy-customizer.processed\"\
+        , \"true\");\n    context.setVariable(\"cors-policy-customizer.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"cors-policy-customizer\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-EvaluateCorsOrigin: \" + err);\n}\n"
+- name: AM-SetCorsHeaders
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetCorsHeaders
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetCorsHeaders
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: cors-policy-customizer
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

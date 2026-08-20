@@ -1,0 +1,116 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: mongodb-atlas-data-api
+displayName: MongoDB Atlas Data API Proxy
+type: feature
+description: Proxies MongoDB Atlas Data API with API Key authentication, BSON-to-JSON type translation (ObjectId, ISODate),
+  and query filter validation.
+categories:
+- draft
+- database
+parameters:
+- name: TargetEndpointUrl
+  default: https://data.mongodb-api.com/app/{mongo.appId}/endpoint/data/v1/action
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/mongodb/data
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: JS-SanitizeMongoBson
+    - name: AM-SetMongoAuth
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://data.mongodb-api.com/app/{mongo.appId}/endpoint/data/v1/action
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://data.mongodb-api.com/app/{mongo.appId}/endpoint/data/v1/action
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: mongodb-atlas-data-api-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: JS-SanitizeMongoBson
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-SanitizeMongoBson
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-SanitizeMongoBson
+      properties: {}
+      source: "// JS-SanitizeMongoBson - Custom logic for mongodb-atlas-data-api\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"mongodb-atlas-data-api.processed\"\
+        , \"true\");\n    context.setVariable(\"mongodb-atlas-data-api.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"mongodb-atlas-data-api\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-SanitizeMongoBson: \" + err);\n}\n"
+- name: AM-SetMongoAuth
+  type: AssignMessage
+  content:
+    assignMessage:
+      metadata:
+        name: AM-SetMongoAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      displayName: AM-SetMongoAuth
+      properties: {}
+      set:
+        headers:
+          header:
+          - metadata:
+              name: X-Apigee-Feature
+            value: mongodb-atlas-data-api
+          - metadata:
+              name: X-Apigee-Time
+            value: '{system.timestamp}'
+      ignoreUnresolvedVariables: 'true'
+      assignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

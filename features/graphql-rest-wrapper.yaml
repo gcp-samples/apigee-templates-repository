@@ -1,0 +1,87 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: graphql-rest-wrapper
+displayName: REST-to-GraphQL Query Aggregator
+type: feature
+description: Wraps complex backend GraphQL endpoints into clean, predictable RESTful resource endpoints (/users/{id}/orders)
+  for mobile and web clients.
+categories:
+- draft
+- transformation
+parameters:
+- name: TargetEndpointUrl
+  default: https://graphql-backend.internal/graphql
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/integration/graphql-wrap
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-BuildGraphQLQuery
+    - name: JS-UnwrapGraphQLData
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://graphql-backend.internal/graphql
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://graphql-backend.internal/graphql
+endpoints: []
+targets: []
+policies:
+- name: JS-BuildGraphQLQuery
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-BuildGraphQLQuery
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-BuildGraphQLQuery
+      properties: {}
+      source: "// JS-BuildGraphQLQuery - Custom logic for graphql-rest-wrapper\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"graphql-rest-wrapper.processed\"\
+        , \"true\");\n    context.setVariable(\"graphql-rest-wrapper.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"graphql-rest-wrapper\",\n                \"processedAt\": new Date().toISOString()\n \
+        \           };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-BuildGraphQLQuery: \" + err);\n}\n"
+- name: JS-UnwrapGraphQLData
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-UnwrapGraphQLData
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-UnwrapGraphQLData
+      properties: {}
+      source: "// JS-UnwrapGraphQLData - Custom logic for graphql-rest-wrapper\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"graphql-rest-wrapper.processed\"\
+        , \"true\");\n    context.setVariable(\"graphql-rest-wrapper.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"graphql-rest-wrapper\",\n                \"processedAt\": new Date().toISOString()\n \
+        \           };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-UnwrapGraphQLData: \" + err);\n}\n"
+resources: []
+tests: []

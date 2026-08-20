@@ -1,0 +1,91 @@
+gateway: apigee
+schemaVersion: 1.0.0
+name: planetscale-database-proxy
+displayName: PlanetScale MySQL Serverless Proxy
+type: feature
+description: Proxies PlanetScale Serverless MySQL API with Service Token authentication, transactional session headers, and
+  structured error reporting.
+categories:
+- draft
+- database
+parameters:
+- name: TargetEndpointUrl
+  default: https://api.planetscale.com/v1/organizations/{ps.org}/databases/{ps.database}/branches/main/query
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/planetscale/query
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: JS-FormatPlanetScaleRows
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatPlanetScaleRows
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://api.planetscale.com/v1/organizations/{ps.org}/databases/{ps.database}/branches/main/query
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+  httpTargetConnection:
+    properties: {}
+    url: https://api.planetscale.com/v1/organizations/{ps.org}/databases/{ps.database}/branches/main/query
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    keyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: planetscale-database-proxy-secrets
+      displayName: KVM-LoadCredentials
+      properties: {}
+      exclusiveCache: 'false'
+      expiryTimeInSecs: '300'
+      get:
+      - metadata:
+          assignTo: private.targetApiKey
+        key:
+          parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        key:
+          parameter: ApiSecret
+      scope: environment
+- name: JS-FormatPlanetScaleRows
+  type: Javascript
+  content:
+    javascript:
+      metadata:
+        name: JS-FormatPlanetScaleRows
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      displayName: JS-FormatPlanetScaleRows
+      properties: {}
+      source: "// JS-FormatPlanetScaleRows - Custom logic for planetscale-database-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"planetscale-database-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"planetscale-database-proxy.timestamp\", Date.now().toString());\n    \n  \
+        \  // Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n \
+        \   if (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"planetscale-database-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatPlanetScaleRows: \" + err);\n}\n"
+resources: []
+tests: []
