@@ -7,8 +7,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "sync": "node src/sync-ai-functions.js",
-    "build": "node src/sync-ai-functions.js"
+    "sync": "node src/sync-ai-functions.js && node src/sync-oas.js",
+    "build": "node src/sync-ai-functions.js && node src/sync-oas.js"
   },
   "devDependencies": {
     "@types/node": "^22.13.4",
