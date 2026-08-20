@@ -13,7 +13,7 @@ Welcome to the **Apigee Templates Repository** — an enterprise catalog of modu
 - [Overview & Architecture](#overview--architecture)
 - [Deploy with Jupyter Notebooks & Google Colab](#deploy-with-jupyter-notebooks--google-colab)
 - [Deploy with gcloud or aft CLI](#deploy-with-gcloud-or-aft-cli)
-- [Released Features](#released-features)
+- [Stable Features](#stable-features)
 - [Draft Extension Features](#draft-extension-features)
   - [1. Google Cloud Services](#1-google-cloud-services)
   - [2. Databases & Data Stores](#2-databases--data-stores)
@@ -27,6 +27,7 @@ Welcome to the **Apigee Templates Repository** — an enterprise catalog of modu
 - [Repository Structure](#repository-structure)
 - [Contributing](#contributing)
 - [License](#license)
+- [Disclaimer](#disclaimer)
 
 ---
 
@@ -70,7 +71,7 @@ Every template and feature in this repository includes a dedicated, runnable **J
 ### Zero-Setup Managed Execution with Google Colab
 
 You can run and test any feature without installing any local development tools:
-1. Click the **`Open In Colab`** badge next to any feature in the [Released Features](#released-features) or [Draft Features](#draft-extension-features) tables below.
+1. Click the **`Open In Colab`** badge next to any feature in the [Stable Features](#stable-features) or [Draft Features](#draft-extension-features) tables below.
 2. Google Colab opens the notebook directly in a managed cloud runtime.
 3. Execute each cell sequentially to authenticate, deploy, and verify the feature.
 
@@ -137,9 +138,9 @@ aft features/cloud-run-proxy.yaml -o $PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
 
 ---
 
-## Released Features
+## Stable Features
 
-Production-ready features available for immediate deployment.
+Stable features available for deployment.
 
 | Feature | Description | Category | Dependencies | Colab Notebook |
 |---|---|---|---|---|
@@ -337,3 +338,9 @@ Production-ready features available for immediate deployment.
 
 ## License
 This project is licensed under the [Apache 2.0 License](LICENSE).
+
+---
+
+## Disclaimer
+
+This is not an officially supported Google product. This repository is provided without warranty or support.
