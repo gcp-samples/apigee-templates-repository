@@ -14,7 +14,7 @@ Welcome to the **Apigee Templates Repository** — an enterprise catalog of modu
 - [Deploy with Jupyter Notebooks & Google Colab](#deploy-with-jupyter-notebooks--google-colab)
 - [Deploy with gcloud or aft CLI](#deploy-with-gcloud-or-aft-cli)
 - [Released Features](#released-features)
-- [Draft Extension Features (100+)](#draft-extension-features-100)
+- [Draft Extension Features](#draft-extension-features)
   - [1. Google Cloud Services](#1-google-cloud-services)
   - [2. Databases & Data Stores](#2-databases--data-stores)
   - [3. AWS Cloud Services](#3-aws-cloud-services)
@@ -70,7 +70,7 @@ Every template and feature in this repository includes a dedicated, runnable **J
 ### Zero-Setup Managed Execution with Google Colab
 
 You can run and test any feature without installing any local development tools:
-1. Click the **`Open In Colab`** badge next to any feature in the [Released Features](#released-features) or [Draft Features](#draft-extension-features-100) tables below.
+1. Click the **`Open In Colab`** badge next to any feature in the [Released Features](#released-features) or [Draft Features](#draft-extension-features) tables below.
 2. Google Colab opens the notebook directly in a managed cloud runtime.
 3. Execute each cell sequentially to authenticate, deploy, and verify the feature.
 
@@ -154,7 +154,7 @@ Production-ready features available for immediate deployment.
 
 ---
 
-## Draft Extension Features (100+)
+## Draft Extension Features
 
 > [!NOTE]
 > All features below carry the `category: draft` tag to indicate that they are in active testing and integration validation. Each feature includes a dedicated Jupyter notebook in [`notebooks/`](notebooks/) that you can open and run directly in Google Colab.
