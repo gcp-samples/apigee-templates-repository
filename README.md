@@ -4,7 +4,7 @@
 [![Apigee](https://img.shields.io/badge/Google_Cloud-Apigee-4285F4.svg)](https://cloud.google.com/apigee)
 [![Templates](https://img.shields.io/badge/Templates-117+-green.svg)](#)
 
-Welcome to the **Apigee Templates Repository** — an enterprise catalog of modular, reusable, and battle-tested Apigee Feature Templater (`aft`) definitions, policy configurations, and cloud integration patterns.
+Welcome to the **Apigee Templates Repository** — an enterprise catalogue of modular, reusable, and battle-tested Apigee Feature Templater (`aft`) definitions, policy configurations, and cloud integration patterns.
 
 ---
 
