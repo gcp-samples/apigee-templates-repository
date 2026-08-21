@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-const { getTargetRoute } = require("../ai-functions/getTargetRoute.js");
+const { getTargetRoute } = require("../ai-functions/getRequestInfo.js");
 
 describe("getTargetRoute", () => {
   it("should detect provider and route from model prefixes and names", () => {

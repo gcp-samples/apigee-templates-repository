@@ -1,6 +1,6 @@
 var utilities = require("./ai-functions/utilities");
 var getRequestInfo = require("./ai-functions/getRequestInfo").getRequestInfo;
-var getTargetRoute = require("./ai-functions/getTargetRoute").getTargetRoute;
+var getTargetRoute = require("./ai-functions/getRequestInfo").getTargetRoute;
 var testAllowedModels = require("./ai-functions/testAllowedModels").testAllowedModels;
 var testDeniedModels = require("./ai-functions/testDeniedModels").testDeniedModels;
 var setPrompt = require("./ai-functions/setPrompt").setPrompt;

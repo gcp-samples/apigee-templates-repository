@@ -41,130 +41,85 @@ policies:
         DisplayName: JS-CheckModel
         Properties: {}
         Source: |
-          
-          function safeJsonParse(str) {
-            if (!str) return null;
-            if (typeof str === "object") return str;
-            if (typeof str !== "string") return null;
-            var cleaned = str.trim();
-            if (cleaned.indexOf("{") !== 0 && cleaned.indexOf("[") !== 0) return null;
-            try {
-              return JSON.parse(cleaned);
-            } catch (e1) {
-              try {
-                var sanitized = cleaned.replace(/\r?\n/g, "\\n");
-                return JSON.parse(sanitized);
-              } catch (e2) {
-                return null;
-              }
-            }
-          }
 
           var aiKey = context.getVariable("request.header.x-ai-key");
           var apiKey = context.getVariable("request.header.x-api-key");
-
           if (!aiKey && apiKey) {
             context.setVariable("request.header.x-ai-key", apiKey);
           }
 
-          var url = context.getVariable("proxy.url") || "";
-          var contentType = context.getVariable("request.header.Content-Type") || "";
           var prices = context.getVariable("ai.prices");
-          var parsedPrices = safeJsonParse(prices);
-          if (!parsedPrices) {
+          try {
+            if (!prices || !JSON.parse(prices)) {
+              context.setVariable("ai.prices", JSON.stringify({
+                "default": { "requestPerMillionTokens": 1, "responsePerMillionTokens": 3 }
+              }));
+            }
+          } catch (e) {
             context.setVariable("ai.prices", JSON.stringify({
               "default": { "requestPerMillionTokens": 1, "responsePerMillionTokens": 3 }
             }));
           }
 
+          var url = context.getVariable("proxy.url") || "";
+          var contentType = context.getVariable("request.header.Content-Type") || "";
           var rawBody = context.getVariable("request.content") || request.content;
+          var modelRoutingConfig = context.getVariable("ai.modelRouting");
+
+          var reqInfo = getRequestInfo(url, rawBody, contentType, modelRoutingConfig);
+
+          var formModel = context.getVariable("request.formparam.model");
+          if (formModel && (!reqInfo.rawModelName || reqInfo.rawModelName === "" || reqInfo.modelName === "unknown")) {
+            reqInfo = getRequestInfo(url, { model: formModel }, contentType, modelRoutingConfig);
+          }
+
+          var modelRouting = context.getVariable("propertyset.ai.ModelRouting") || context.getVariable("propertyset.ModelRouting");
+          var isRoutingEnabled = modelRouting && (modelRouting.toString().toLowerCase() === "true" || modelRouting === true);
+
+          if (isRoutingEnabled && reqInfo.targetRoute) {
+            context.setVariable("target.route", reqInfo.targetRoute);
+            context.setVariable("ai.targetRoute", reqInfo.targetRoute);
+          }
+
+          var targetRoute = context.getVariable("target.route") || reqInfo.targetRoute;
+          var effectiveProvider = reqInfo.provider !== "unknown" ? reqInfo.provider : reqInfo.protocol;
+          context.setVariable("ai.provider", effectiveProvider);
+
           var requestContent = null;
           try {
             requestContent = request.content.asJSON;
           } catch (e) {}
 
-          var reqInfo = getRequestInfo(url, rawBody, contentType);
-
-          var formModel = context.getVariable("request.formparam.model");
-          if (formModel && (!reqInfo.rawModelName || reqInfo.rawModelName === "" || reqInfo.modelName === "unknown")) {
-            reqInfo.rawModelName = formModel;
-            reqInfo.modelName = formModel.split("/").pop();
-            reqInfo.protocol = "openai";
-          }
-
-          var aiProtocol = reqInfo.protocol;
-          var modelName = reqInfo.modelName;
-
-          var callStreaming = "non-streaming";
-          if (url.toLowerCase().includes("stream") || (requestContent && requestContent["stream"] === true)) {
-            callStreaming = "streaming";
-          }
-
-          var modelRouting = context.getVariable("propertyset.ai.ModelRouting") || context.getVariable("propertyset.ModelRouting");
-          var modelRoutingConfig = context.getVariable("ai.modelRouting");
-          var rawModel = reqInfo.rawModelName || ((requestContent && requestContent["model"]) ? requestContent["model"] : modelName);
-          var routeInfo = getTargetRoute(rawModel, modelRoutingConfig);
-
-          var isRoutingEnabled = modelRouting && (modelRouting.toString().toLowerCase() === "true" || modelRouting === true);
-
-          var cleanModel = (routeInfo && routeInfo.mappedModelName) ? routeInfo.mappedModelName :
-                           ((routeInfo && routeInfo.cleanModelName) ? routeInfo.cleanModelName : modelName);
-
-          if (isRoutingEnabled && routeInfo) {
-            if (routeInfo.targetRoute) {
-              context.setVariable("target.route", routeInfo.targetRoute);
-              context.setVariable("ai.targetRoute", routeInfo.targetRoute);
-            }
-            if (cleanModel) {
-              modelName = cleanModel;
-            }
-          }
-
-          var effectiveProvider = (routeInfo && routeInfo.provider) ? routeInfo.provider : aiProtocol;
-          var targetRoute = context.getVariable("target.route") || (routeInfo ? routeInfo.targetRoute : "");
-          context.setVariable("ai.provider", effectiveProvider);
-
-          if (aiProtocol === "openai" && effectiveProvider !== "openai" && targetRoute !== "openai") {
+          if (reqInfo.protocol === "openai" && effectiveProvider !== "openai" && targetRoute !== "openai") {
             if (reqInfo.requestType === "audio-data" && effectiveProvider === "google") {
-              var contentTypeHeader = context.getVariable("request.header.Content-Type") || "";
-              var multipartObj = parseMultipartFormData(rawBody, contentTypeHeader);
-
-              var formModel = context.getVariable("request.formparam.model");
+              var multipartObj = parseMultipartFormData(rawBody, contentType);
               if (formModel && !multipartObj.model) multipartObj.model = formModel;
               var formPrompt = context.getVariable("request.formparam.prompt");
               if (formPrompt && !multipartObj.prompt) multipartObj.prompt = formPrompt;
               var formLang = context.getVariable("request.formparam.language");
               if (formLang && !multipartObj.language) multipartObj.language = formLang;
 
-              requestContent = convertOpenAiPayload(multipartObj, effectiveProvider, reqInfo.requestType, routeInfo);
+              requestContent = convertOpenAiPayload(multipartObj, effectiveProvider, reqInfo.requestType, reqInfo);
               context.setVariable("request.header.Content-Type", "application/json");
               request.content = JSON.stringify(requestContent);
             } else {
-              requestContent = convertOpenAiPayload(requestContent, effectiveProvider, reqInfo.requestType, routeInfo);
+              requestContent = convertOpenAiPayload(requestContent || rawBody, effectiveProvider, reqInfo.requestType, reqInfo);
               request.content = JSON.stringify(requestContent);
             }
           } else if (requestContent && typeof requestContent === "object" && requestContent["model"]) {
-            requestContent["model"] = cleanModel;
+            requestContent["model"] = reqInfo.cleanModelName || reqInfo.modelName;
             request.content = JSON.stringify(requestContent);
           }
 
-          context.setVariable("ai.protocol", aiProtocol);
-          context.setVariable("ai.model", modelName);
-          context.setVariable("ai.requestType", callStreaming);
-          context.setVariable("ai.apiType", aiProtocol);
+          context.setVariable("ai.protocol", reqInfo.protocol);
+          context.setVariable("ai.model", reqInfo.cleanModelName || reqInfo.modelName);
+          context.setVariable("ai.requestType", reqInfo.streaming);
+          context.setVariable("ai.apiType", reqInfo.protocol);
           context.setVariable("ai.type", reqInfo.requestType);
           context.setVariable("ai.user", "unknown");
 
-          if (routeInfo && routeInfo.provider === "anthropic") {
-            context.setVariable("ai.method", callStreaming === "streaming" ? "streamRawPredict" : "rawPredict");
-          } else if (routeInfo && routeInfo.provider === "google") {
-            if (reqInfo.requestType === "embeddings") {
-              context.setVariable("ai.method", "embedContent");
-            } else if (callStreaming === "non-streaming") {
-              context.setVariable("ai.method", "generateContent");
-            } else {
-              context.setVariable("ai.method", "streamGenerateContent");
-            }
+          if (reqInfo.method) {
+            context.setVariable("ai.method", reqInfo.method);
           }
 
           if (reqInfo.input) {
@@ -177,19 +132,14 @@ policies:
             print("RequestInfo: " + JSON.stringify(reqInfo));
             print("ModelRoutingEnabled: " + JSON.stringify(modelRouting));
             print("ModelRouting: " + JSON.stringify(modelRoutingConfig));
-            print("TargetRoute: " + JSON.stringify(routeInfo));
-            print("ai.Model: " + modelName);
-            print("ai.Protocol: " + aiProtocol);
+            print("ai.Model: " + (reqInfo.cleanModelName || reqInfo.modelName));
+            print("ai.Protocol: " + reqInfo.protocol);
             print("ai.Provider: " + effectiveProvider);
           }
 
           var googleCloudProject = context.getVariable("organization.name");
           var newProject = context.getVariable("request.header.x-project");
-
-          if (newProject)
-            context.setVariable("ai.googleCloudProject", newProject);
-          else
-            context.setVariable("ai.googleCloudProject", googleCloudProject);
+          context.setVariable("ai.googleCloudProject", newProject || googleCloudProject);
         IncludeURL: jsc://ai-functions.js
   - name: AM-SetVariables
     type: AssignMessage
@@ -367,19 +317,25 @@ resources:
         };
       }
 
-      function getRequestInfo(urlString, content, contentType) {
+      function getRequestInfo(urlString, content, contentType, routingConfig) {
         var info = {
           input: "",
           rawModelName: "",
           modelName: "unknown",
+          cleanModelName: "",
           protocol: "unknown",
-          requestType: "text"
+          provider: "unknown",
+          targetRoute: "",
+          region: "global",
+          requestType: "text",
+          isStreaming: false,
+          streaming: "non-streaming"
         };
 
         var url = urlString || "";
         var lowerUrl = url.toLowerCase();
 
-        // 1. Detect requestType from URL
+        // 1. Detect requestType and streaming from URL
         if (lowerUrl.indexOf("/audio/speech") !== -1 || lowerUrl.indexOf("/speech/audio") !== -1) {
           info.requestType = "audio-text";
         } else if (lowerUrl.indexOf("/audio/transcription") !== -1 || lowerUrl.indexOf("/audio/translation") !== -1) {
@@ -390,10 +346,23 @@ resources:
           info.requestType = "embeddings";
         }
 
-        // Parse content JSON or multipart data
+        if (lowerUrl.indexOf("stream") !== -1) {
+          info.isStreaming = true;
+          info.streaming = "streaming";
+        }
+
+        // 2. Parse request payload
         var contentData = null;
         if (typeof content === "object" && content !== null && !content.asJSON && !content.asString) {
-          if (content.model !== undefined || content.contents !== undefined || content.messages !== undefined || content.input !== undefined || content.prompt !== undefined) {
+          if (
+            content.model !== undefined ||
+            content.modelVersion !== undefined ||
+            content.contents !== undefined ||
+            content.messages !== undefined ||
+            content.input !== undefined ||
+            content.prompt !== undefined ||
+            content.stream !== undefined
+          ) {
             contentData = content;
           }
         }
@@ -423,15 +392,17 @@ resources:
           }
         }
 
+        // 3. Extract model, streaming, and fallback requestType from contentData
         if (contentData && typeof contentData === "object") {
-          // Fallback requestType check from payload if URL didn't specify
-          if (info.requestType === "text") {
-            if (contentData["voice"] !== undefined && contentData["input"] !== undefined) {
-              info.requestType = "audio-text";
-            }
+          if (contentData.stream === true || contentData.stream === "true") {
+            info.isStreaming = true;
+            info.streaming = "streaming";
           }
 
-          // 2. Extract modelName and rawModelName from payload
+          if (info.requestType === "text" && contentData["voice"] !== undefined && contentData["input"] !== undefined) {
+            info.requestType = "audio-text";
+          }
+
           if (contentData["model"] && typeof contentData["model"] === "string") {
             info.rawModelName = contentData["model"];
             var modelParts = info.rawModelName.split("/");
@@ -446,7 +417,7 @@ resources:
           info.protocol = "openai";
         }
 
-        // If modelName still unknown, extract from GCP publisher URL format
+        // 4. Extract modelName from GCP publisher URL format if not yet determined
         if (info.modelName === "unknown" && url) {
           if (url.indexOf("/publishers/anthropic/models/") !== -1) {
             var aParts = url.split("/publishers/anthropic/models/");
@@ -465,9 +436,12 @@ resources:
               info.modelName = uParts[uParts.length - 1];
             }
           }
+          if (!info.rawModelName && info.modelName !== "unknown") {
+            info.rawModelName = info.modelName;
+          }
         }
 
-        // 3. Detect protocol and extract main input prompt/text
+        // 5. Detect API protocol and extract user input / prompt
         if (contentData && typeof contentData === "object") {
           if (contentData["contents"] && Array.isArray(contentData["contents"])) {
             info.protocol = "google";
@@ -510,107 +484,132 @@ resources:
           }
         }
 
-        return info;
-      }
+        // 6. Process Target Routing and Provider / Model Normalization
+        var currentModel = info.rawModelName || (info.modelName !== "unknown" ? info.modelName : "");
+        info.cleanModelName = info.modelName !== "unknown" ? info.modelName : "";
 
-      function getTargetRoute(modelName, config) {
-        var result = {
-          provider: "unknown",
-          region: "global",
-          cleanModelName: modelName || "",
-          targetRoute: ""
-        };
-
-        if (!modelName || modelName === "unknown") {
-          return result;
-        }
-
-        var parsedConfig = null;
-        if (config) {
-          if (typeof config === "string") {
-            try {
-              parsedConfig = JSON.parse(config);
-            } catch (e) {}
-          } else if (typeof config === "object") {
-            parsedConfig = config;
-          }
-        }
-
-        var currentModel = modelName;
-
-        // 1. Check mappings in config
-        if (parsedConfig && parsedConfig.mappings) {
-          if (parsedConfig.mappings[currentModel]) {
-            currentModel = parsedConfig.mappings[currentModel];
-            result.mappedModelName = currentModel;
-          } else {
-            var rawProv = "";
-            var clean = currentModel;
-            if (currentModel.indexOf("/") !== -1) {
-              var p = currentModel.split("/");
-              rawProv = p[0];
-              clean = p.slice(1).join("/");
-            }
-            var provModelKey = rawProv ? (rawProv + "/" + clean) : clean;
-            if (parsedConfig.mappings[provModelKey]) {
-              currentModel = parsedConfig.mappings[provModelKey];
-              result.mappedModelName = currentModel;
-            } else if (parsedConfig.mappings[clean]) {
-              currentModel = parsedConfig.mappings[clean];
-              result.mappedModelName = currentModel;
+        if (currentModel) {
+          var parsedConfig = null;
+          if (routingConfig) {
+            if (typeof routingConfig === "string") {
+              try {
+                parsedConfig = JSON.parse(routingConfig);
+              } catch (e) {}
+            } else if (typeof routingConfig === "object") {
+              parsedConfig = routingConfig;
             }
           }
-        }
 
-        var rawProvider = "";
-        var cleanModel = currentModel;
-
-        if (currentModel.indexOf("/") !== -1) {
-          var parts = currentModel.split("/");
-          rawProvider = parts[0];
-          cleanModel = parts.slice(1).join("/");
-        }
-
-        if (rawProvider) {
-          result.provider = rawProvider;
-        } else {
-          var lower = currentModel.toLowerCase();
-          if (lower.indexOf("gemini") !== -1 || lower.indexOf("embedding") !== -1) {
-            result.provider = "google";
-            result.targetRoute = "googlecloud";
-          } else if (lower.indexOf("claude") !== -1) {
-            result.provider = "anthropic";
-            result.targetRoute = "anthropic";
-          } else if (lower.indexOf("gpt") !== -1) {
-            result.provider = "openai";
-            result.targetRoute = "openai";
-          } else {
-            result.provider = "unknown";
-          }
-        }
-
-        result.cleanModelName = cleanModel;
-
-        // 2. Straight model string mapping to target in models
-        if (parsedConfig && parsedConfig.models) {
-          if (parsedConfig.models[currentModel]) {
-            result.targetRoute = parsedConfig.models[currentModel];
-          } else if (parsedConfig.models[modelName]) {
-            result.targetRoute = parsedConfig.models[modelName];
-          } else if (parsedConfig.models[cleanModel]) {
-            result.targetRoute = parsedConfig.models[cleanModel];
-          }
-
-          if (!result.targetRoute) {
-            for (var modelKey in parsedConfig.models) {
-              if (currentModel.indexOf(modelKey) !== -1 || modelKey.indexOf(currentModel) !== -1) {
-                result.targetRoute = parsedConfig.models[modelKey];
-                break;
+          // A. Check config mappings
+          if (parsedConfig && parsedConfig.mappings) {
+            if (parsedConfig.mappings[currentModel]) {
+              currentModel = parsedConfig.mappings[currentModel];
+              info.mappedModelName = currentModel;
+            } else {
+              var rawProv = "";
+              var clean = currentModel;
+              if (currentModel.indexOf("/") !== -1) {
+                var p = currentModel.split("/");
+                rawProv = p[0];
+                clean = p.slice(1).join("/");
+              }
+              var provModelKey = rawProv ? (rawProv + "/" + clean) : clean;
+              if (parsedConfig.mappings[provModelKey]) {
+                currentModel = parsedConfig.mappings[provModelKey];
+                info.mappedModelName = currentModel;
+              } else if (parsedConfig.mappings[clean]) {
+                currentModel = parsedConfig.mappings[clean];
+                info.mappedModelName = currentModel;
               }
             }
           }
+
+          // B. Detect provider and clean model name
+          var rawProvider = "";
+          var cleanModel = currentModel;
+
+          if (currentModel.indexOf("/") !== -1) {
+            var parts = currentModel.split("/");
+            rawProvider = parts[0];
+            cleanModel = parts.slice(1).join("/");
+          }
+
+          if (rawProvider) {
+            info.provider = rawProvider;
+            info.cleanModelName = cleanModel;
+          } else {
+            var lower = currentModel.toLowerCase();
+            if (lower.indexOf("gemini") !== -1 || lower.indexOf("google") !== -1 || lower.indexOf("embedding") !== -1 || lower.indexOf("imagen") !== -1) {
+              info.provider = "google";
+              info.targetRoute = "googlecloud";
+            } else if (lower.indexOf("claude") !== -1 || lower.indexOf("anthropic") !== -1) {
+              info.provider = "anthropic";
+              info.targetRoute = "anthropic";
+            } else if (lower.indexOf("gpt") !== -1 || lower.indexOf("dall-e") !== -1 || lower.indexOf("o1") !== -1 || lower.indexOf("o3") !== -1 || lower.indexOf("whisper") !== -1 || lower.indexOf("tts") !== -1) {
+              info.provider = "openai";
+              info.targetRoute = "openai";
+            } else {
+              info.provider = "unknown";
+            }
+            info.cleanModelName = cleanModel;
+          }
+
+          // C. Check config models for explicit targetRoute mapping or provider prefix mapping
+          if (parsedConfig && parsedConfig.models) {
+            if (parsedConfig.models[currentModel]) {
+              info.targetRoute = parsedConfig.models[currentModel];
+            } else if (parsedConfig.models[info.rawModelName]) {
+              info.targetRoute = parsedConfig.models[info.rawModelName];
+            } else if (parsedConfig.models[cleanModel]) {
+              info.targetRoute = parsedConfig.models[cleanModel];
+            } else if (info.provider && parsedConfig.models[info.provider + "/" + cleanModel]) {
+              info.targetRoute = parsedConfig.models[info.provider + "/" + cleanModel];
+            } else if (info.provider && parsedConfig.models[info.provider + "/"]) {
+              info.targetRoute = parsedConfig.models[info.provider + "/"];
+            } else if (info.provider && parsedConfig.models[info.provider]) {
+              info.targetRoute = parsedConfig.models[info.provider];
+            } else {
+              for (var mKey in parsedConfig.models) {
+                if (mKey.charAt(mKey.length - 1) === "/" && (currentModel.indexOf(mKey) === 0 || (info.provider + "/").indexOf(mKey) === 0)) {
+                  info.targetRoute = parsedConfig.models[mKey];
+                  break;
+                }
+              }
+            }
+          }
+
+          if (info.mappedModelName) {
+            info.modelName = cleanModel;
+          }
         }
 
+        // 7. Method resolution based on provider and streaming
+        if (info.provider === "anthropic") {
+          info.method = info.isStreaming ? "streamRawPredict" : "rawPredict";
+        } else if (info.provider === "google") {
+          if (info.requestType === "embeddings") {
+            info.method = "embedContent";
+          } else if (info.isStreaming) {
+            info.method = "streamGenerateContent";
+          } else {
+            info.method = "generateContent";
+          }
+        }
+
+        return info;
+      }
+
+      function getTargetRoute(modelName, routingConfig) {
+        var info = getRequestInfo("", { model: modelName }, "", routingConfig);
+        var result = {
+          provider: info.provider,
+          region: info.region,
+          cleanModelName: info.cleanModelName,
+          targetRoute: info.targetRoute
+        };
+        if (info.mappedModelName) {
+          result.mappedModelName = info.mappedModelName;
+        }
         return result;
       }
 

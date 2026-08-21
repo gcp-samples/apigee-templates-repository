@@ -1,6 +1,6 @@
 var utilities = require("./utilities");
 var getRequestInfo = require("./getRequestInfo").getRequestInfo;
-var getTargetRoute = require("./getTargetRoute").getTargetRoute;
+var getTargetRoute = require("./getRequestInfo").getTargetRoute;
 var testAllowedModels = require("./testAllowedModels").testAllowedModels;
 var testDeniedModels = require("./testDeniedModels").testDeniedModels;
 var setPrompt = require("./setPrompt").setPrompt;

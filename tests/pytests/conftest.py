@@ -46,6 +46,30 @@ class LoggingSession(requests.Session):
         return response
 
 
+# Try to load environment from .env or env.sh files
+def _load_env():
+    for env_path in [
+        os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
+        os.path.join(os.path.dirname(__file__), "..", ".env"),
+        os.path.join(os.path.dirname(__file__), ".env"),
+        os.path.join(os.path.dirname(__file__), "..", "..", "env.sh"),
+        os.path.join(os.path.dirname(__file__), "..", "env.sh"),
+        os.path.join(os.path.dirname(__file__), "env.sh"),
+    ]:
+        if os.path.isfile(env_path):
+            with open(env_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip().removeprefix("export ").strip()
+                        v = v.strip().strip('"').strip("'")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+
+_load_env()
+
+
 # --- Shared Helpers ---
 
 @pytest.fixture(scope="session")
@@ -69,7 +93,7 @@ def adc_token():
 @pytest.fixture(scope="session")
 def default_project_id():
     """Retrieve default GCP project ID from environment or gcloud config."""
-    proj = os.getenv("GCP_PROJECT")
+    proj = os.getenv("GOOGLE_CLOUD_PROJECT", os.getenv("GCP_PROJECT"))
     if proj:
         return proj
     try:
@@ -97,7 +121,7 @@ def emulator_url():
 @pytest.fixture(scope="session")
 def emulator_project_id(default_project_id):
     """Return target project ID for local emulator requests."""
-    return os.getenv("EMULATOR_PROJECT_ID", default_project_id)
+    return os.getenv("EMULATOR_PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", default_project_id))
 
 
 @pytest.fixture(scope="session")
@@ -136,12 +160,12 @@ def emulator_client(emulator_url, adc_token, emulator_project_id):
     return session
 
 
-# --- Apigee X Remote Fixtures ---
+# --- Apigee Remote Fixtures ---
 
 @pytest.fixture(scope="session")
 def apigee_x_url():
-    """Return the remote Apigee X gateway base URL."""
-    url = os.getenv("APIGEE_X_URL", os.getenv("APIGEE_X_HOST"))
+    """Return the remote Apigee gateway base URL."""
+    url = os.getenv("APIGEE_URL", os.getenv("APIGEE_X_URL", os.getenv("APIGEE_X_HOST")))
     if not url:
         return None
     return url.rstrip("/")
@@ -149,23 +173,23 @@ def apigee_x_url():
 
 @pytest.fixture(scope="session")
 def apigee_x_api_key():
-    """Return the API Key for remote Apigee X developer app."""
-    return os.getenv("APIGEE_X_API_KEY", os.getenv("APIGEE_API_KEY"))
+    """Return the API Key for remote Apigee developer app."""
+    return os.getenv("APIGEE_API_KEY", os.getenv("APIGEE_X_API_KEY"))
 
 
 @pytest.fixture(scope="session")
 def apigee_x_project_id(default_project_id):
-    """Return target project ID for remote Apigee X requests."""
-    return os.getenv("APIGEE_X_PROJECT_ID", default_project_id)
+    """Return target project ID for remote Apigee requests."""
+    return os.getenv("GOOGLE_CLOUD_PROJECT", os.getenv("APIGEE_X_PROJECT_ID", default_project_id))
 
 
 @pytest.fixture
 def apigee_x_client(apigee_x_url, apigee_x_api_key, adc_token, apigee_x_project_id):
-    """Pre-configured LoggingSession for Remote Apigee X (API Key + ADC token auth)."""
+    """Pre-configured LoggingSession for Remote Apigee (API Key + ADC token auth)."""
     if not apigee_x_url:
-        pytest.skip("APIGEE_X_URL environment variable is not set. Skipping Apigee X remote test.")
+        pytest.skip("APIGEE_URL / APIGEE_X_URL environment variable is not set. Skipping Apigee remote test.")
     if not apigee_x_api_key:
-        pytest.skip("APIGEE_X_API_KEY environment variable is not set. Skipping Apigee X remote test.")
+        pytest.skip("APIGEE_API_KEY / APIGEE_X_API_KEY environment variable is not set. Skipping Apigee remote test.")
 
     session = LoggingSession()
     session.headers.update(

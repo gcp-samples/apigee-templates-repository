@@ -76,16 +76,6 @@ You can run and test any feature without installing any local development tools:
 3. Execute each cell sequentially to authenticate, deploy, and verify the feature.
 
 ### Automated Steps in Each Notebook
-
-```mermaid
-flowchart TD
-    A["1. Environment Setup<br/>(Clone repo & install dependencies)"] --> B["2. GCP Authentication<br/>(google.colab.auth / Service Account)"]
-    B --> C["3. Interactive Configuration<br/>(Set Project ID, Org, Env, Host & Secrets)"]
-    C --> D["4. Compile & Bundle<br/>(Validate YAML & generate proxy bundle)"]
-    D --> E["5. Deploy to Apigee<br/>(via gcloud beta apigee or aft)"]
-    E --> F["6. Live Verification<br/>(Execute test requests & validate responses)"]
-```
-
 1. **Environment Setup**: Clones the repository and verifies required Python and CLI utilities.
 2. **Google Cloud Authentication**: Authenticates your Google Cloud account via `google.colab.auth.authenticate_user()` or GCP Service Account key.
 3. **Interactive Configuration Form**: Easily set parameters using Colab form fields:
@@ -142,6 +132,8 @@ aft features/cloud-run-proxy.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVIC
 ## Stable Features
 
 Stable features available for deployment.
+
+### AI, Vector Databases & Search
 
 | Feature | Description | Category | Dependencies | Colab Notebook |
 |---|---|---|---|---|
@@ -249,7 +241,7 @@ Stable features available for deployment.
 | **`pagerduty-events-proxy`** | Ingests incident triggers, acknowledgments, and resolutions into PagerDuty Events API v2 with routing key injection and payload validation. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/pagerduty-events-proxy.ipynb) |
 | **`okta-management-proxy`** | Proxies Okta Management API for user provisioning, group management, and factor enrollment with SSWS API token authentication. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/okta-management-proxy.ipynb) |
 
-### 6. Vector Databases, Search & AI
+### 6. AI, Vector Databases & Search
 
 | Feature ID | Description | Dependencies | Colab Notebook |
 |---|---|---|---|

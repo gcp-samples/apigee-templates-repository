@@ -44,18 +44,22 @@ show_help() {
 
 ${BOLD}Options:${NC}
   -v, --verbose      Enable verbose mode (print requests, headers, and full responses to terminal)
-  -u, --url <url>    Override base URL (default: APIGEE_X_URL or EMULATOR_URL from .env)
+  -u, --url <url>    Override base URL (default: APIGEE_URL or EMULATOR_URL from .env)
   -k, --key <key>    Override API key (x-api-key header)
   -t, --token <tok>  Override Bearer token (Authorization header)
   -p, --project <id> Override GCP project ID (x-project header)
   -l, --log <file>   Override output log file (default: tests/shtests/test_chat_completions.local.log)
   -h, --help         Show this help message and exit
 
-${BOLD}Environment Variables (.env):${NC}
-  APIGEE_X_URL          Base gateway URL (e.g. https://api.example.com)
-  APIGEE_X_API_KEY      API key sent via 'x-api-key' header
+${BOLD}Environment Variables (.env / env.sh):${NC}
+  GOOGLE_CLOUD_PROJECT  GCP Project ID sent via 'x-project' header
+  EMULATOR_URL          Base emulator URL (default: http://localhost:8998)
   GCLOUD_ADC_TOKEN      Bearer token sent via 'Authorization: Bearer ...' (if API key not set)
-  APIGEE_X_PROJECT_ID   Project ID sent via 'x-project' header"
+  GEMINI_API_KEY        API key for Gemini native endpoints
+  APIGEE_URL            Remote Apigee gateway URL (e.g. https://api.example.com)
+  APIGEE_API_KEY        API key sent via 'x-api-key' header
+  APIGEE_ENV            Apigee Environment name (e.g. dev)
+  APIGEE_SA             Apigee Service Account"
 }
 
 # Parse command line options
@@ -105,7 +109,7 @@ for cmd in curl jq; do
   fi
 done
 
-# Load environment file
+# Load environment file (.env or env.sh)
 if [[ -f "${SCRIPT_DIR}/.env" ]]; then
   # shellcheck source=/dev/null
   set +u
@@ -121,19 +125,24 @@ elif [[ -f "${PROJECT_ROOT}/.env" ]]; then
   set +u
   source "${PROJECT_ROOT}/.env"
   set -u
+elif [[ -f "${PROJECT_ROOT}/env.sh" ]]; then
+  # shellcheck source=/dev/null
+  set +u
+  source "${PROJECT_ROOT}/env.sh"
+  set -u
 fi
 
 # Apply overrides or environment defaults
-BASE_URL="${CUSTOM_URL:-${APIGEE_X_URL:-${EMULATOR_URL:-http://localhost:8998}}}"
+BASE_URL="${CUSTOM_URL:-${APIGEE_URL:-${EMULATOR_URL:-http://localhost:8998}}}"
 BASE_URL="${BASE_URL%/}"
 COMPLETIONS_URL="${BASE_URL}/v1/chat/completions"
 
-API_KEY="${CUSTOM_KEY:-${APIGEE_X_API_KEY:-}}"
+API_KEY="${CUSTOM_KEY:-${APIGEE_API_KEY:-}}"
 ADC_TOKEN="${CUSTOM_TOKEN:-${GCLOUD_ADC_TOKEN:-}}"
-PROJECT_ID="${CUSTOM_PROJECT:-${APIGEE_X_PROJECT_ID:-${EMULATOR_PROJECT_ID:-ai-portals-solution}}}"
+PROJECT_ID="${CUSTOM_PROJECT:-${GOOGLE_CLOUD_PROJECT:-${EMULATOR_PROJECT_ID:-ai-portals-solution}}}"
 
 # Resolve authentication headers based on rule:
-# If APIGEE_X_API_KEY is set, send in x-api-key header.
+# If APIGEE_API_KEY is set, send in x-api-key header.
 # Otherwise, send GCLOUD_ADC_TOKEN in Authorization header.
 AUTH_TYPE=""
 AUTH_HEADER=()

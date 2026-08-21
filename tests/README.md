@@ -86,23 +86,23 @@ export GEMINI_API_KEY="your-gemini-api-key"
 pytest tests/pytests/test_emulator.py
 ```
 
-#### B. Remote Apigee X
+#### B. Remote Apigee / Apigee X
 
-Remote Apigee X tests require the target URL and developer app API key:
+Remote Apigee tests require the target URL and developer app API key:
 
 ```bash
 # Required remote configuration:
-export APIGEE_X_URL="https://api.your-domain.com"
-export APIGEE_X_API_KEY="your-apigee-x-api-key"
-export APIGEE_X_PROJECT_ID="your-apigee-x-project-id"
+export APIGEE_URL="https://api.your-domain.com"
+export APIGEE_API_KEY="your-apigee-api-key"
+export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
 export GCLOUD_ADC_TOKEN="$(gcloud auth application-default print-access-token)"
 
-# Run remote Apigee X test suite:
+# Run remote Apigee test suite:
 pytest tests/pytests/test_apigee_x.py
 ```
 
 #### Single-Line Execution Example
 
 ```bash
-APIGEE_X_URL="https://api.your-domain.com" APIGEE_X_API_KEY="your-api-key" pytest tests/pytests/test_apigee_x.py
+APIGEE_URL="https://api.your-domain.com" APIGEE_API_KEY="your-api-key" GOOGLE_CLOUD_PROJECT="your-project" pytest tests/pytests/test_apigee_x.py
 ```

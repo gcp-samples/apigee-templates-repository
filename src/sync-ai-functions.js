@@ -9,7 +9,6 @@ const TARGET_BUNDLE_PATH = path.resolve(__dirname, "ai-functions.js");
 const ORDERED_FILES = [
   "utilities.js",
   "getRequestInfo.js",
-  "getTargetRoute.js",
   "setPrompt.js",
   "getResponse.js",
   "setResponse.js",

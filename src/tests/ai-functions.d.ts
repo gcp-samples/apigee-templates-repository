@@ -1,6 +1,7 @@
 declare module "../ai-functions.js" {
+  export function getRequestInfo(urlString: string | null, content: string | object | null, contentType?: string | null, routingConfig?: any): any;
   export function getModelName(urlString: string | null, contentString: string | object | null): string;
-  export function getTargetRoute(modelName: string, config?: any): {
+  export function getTargetRoute(modelName: string, routingConfig?: any): {
     provider: string;
     region: string;
     cleanModelName: string;
