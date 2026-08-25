@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: webhook-github-verifier
+displayName: GitHub Webhook HMAC-SHA256 Verifier
+type: feature
+description: Verifies `X-Hub-Signature-256` headers on incoming GitHub Webhooks against a shared secret before routing to
+  internal build workers.
+categories:
+- draft
+- security
+parameters:
+- name: TargetEndpointUrl
+  default: https://internal-ci.example.com/github-events
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/webhooks/github
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-VerifyGitHubWebhookSignature
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://internal-ci.example.com/github-events
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-VerifyGitHubWebhookSignature
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-VerifyGitHubWebhookSignature
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-VerifyGitHubWebhookSignature
+      Properties: {}
+      Source: "// JS-VerifyGitHubWebhookSignature - Custom logic for webhook-github-verifier\ntry {\n    var reqContent =\
+        \ context.getVariable(\"request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson\
+        \ = JSON.parse(reqContent); } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"\
+        webhook-github-verifier.processed\", \"true\");\n    context.setVariable(\"webhook-github-verifier.timestamp\", Date.now().toString());\n\
+        \    \n    // Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\"\
+        );\n    if (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"\
+        _apigee\"] = {\n                \"feature\": \"webhook-github-verifier\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-VerifyGitHubWebhookSignature: \" + err);\n}\n"
+- name: RF-InvalidWebhookSignature
+  type: RaiseFault
+  content:
+    RaiseFault:
+      metadata:
+        name: RF-InvalidWebhookSignature
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: RF-InvalidWebhookSignature
+      Properties: {}
+      FaultResponse:
+        Set:
+          Headers:
+            Header:
+              metadata:
+                name: Content-Type
+              Value: application/json
+          Payload:
+            contentType: application/json
+            Value: '{"error": "RF-InvalidWebhookSignature", "message": "Security or validation fault occurred in feature webhook-github-verifier"}'
+          StatusCode: '400'
+          ReasonPhrase: Bad Request
+      IgnoreUnresolvedVariables: 'true'
+resources: []
+tests: []

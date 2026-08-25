@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: weaviate-vector-proxy
+displayName: Weaviate Vector Search & GraphQL Proxy
+type: feature
+description: Proxies Weaviate Vector Database GraphQL & REST v1 objects API with Bearer token authentication and NearText
+  / NearVector query formatting.
+categories:
+- draft
+- ai
+parameters:
+- name: TargetEndpointUrl
+  default: https://{weaviate.host}/v1/graphql
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/weaviate
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetWeaviateAuth
+    - name: JS-FormatWeaviateResults
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatWeaviateResults
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{weaviate.host}/v1/graphql
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    KeyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: weaviate-vector-proxy-secrets
+      DisplayName: KVM-LoadCredentials
+      Properties: {}
+      ExclusiveCache: 'false'
+      ExpiryTimeInSecs: '300'
+      Get:
+      - metadata:
+          assignTo: private.targetApiKey
+        Key:
+          Parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        Key:
+          Parameter: ApiSecret
+      Scope: environment
+- name: AM-SetWeaviateAuth
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetWeaviateAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetWeaviateAuth
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: weaviate-vector-proxy
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatWeaviateResults
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-FormatWeaviateResults
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-FormatWeaviateResults
+      Properties: {}
+      Source: "// JS-FormatWeaviateResults - Custom logic for weaviate-vector-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"weaviate-vector-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"weaviate-vector-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"weaviate-vector-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatWeaviateResults: \" + err);\n}\n"
+resources: []
+tests: []

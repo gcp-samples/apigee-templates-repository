@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: dynamodb-rest-proxy
+displayName: AWS DynamoDB REST Query & Item Proxy
+type: feature
+description: 'Translates high-level JSON requests to AWS DynamoDB low-level attribute format ({S: ''val'', N: ''123''}) and
+  unmarshals query responses.'
+categories:
+- draft
+- database
+parameters:
+- name: TargetEndpointUrl
+  default: https://dynamodb.{aws.region}.amazonaws.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/dynamodb
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-DynamoJsonMarshaler
+    - name: JS-DynamoJsonUnmarshaler
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://dynamodb.{aws.region}.amazonaws.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-DynamoJsonMarshaler
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-DynamoJsonMarshaler
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-DynamoJsonMarshaler
+      Properties: {}
+      Source: "// JS-DynamoJsonMarshaler - Custom logic for dynamodb-rest-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"dynamodb-rest-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"dynamodb-rest-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"dynamodb-rest-proxy\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-DynamoJsonMarshaler: \" + err);\n}\n"
+- name: JS-DynamoJsonUnmarshaler
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-DynamoJsonUnmarshaler
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-DynamoJsonUnmarshaler
+      Properties: {}
+      Source: "// JS-DynamoJsonUnmarshaler - Custom logic for dynamodb-rest-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"dynamodb-rest-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"dynamodb-rest-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"dynamodb-rest-proxy\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-DynamoJsonUnmarshaler: \" + err);\n}\n"
+resources: []
+tests: []

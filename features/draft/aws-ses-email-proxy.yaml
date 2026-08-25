@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: aws-ses-email-proxy
+displayName: AWS SES Transactional Email Dispatcher
+type: feature
+description: Sends transactional emails via AWS Simple Email Service (SES) v2 REST API with HTML sanitization, sender verification,
+  and SigV4 signing.
+categories:
+- draft
+- aws
+parameters:
+- name: TargetEndpointUrl
+  default: https://email.{aws.region}.amazonaws.com/v2/email/outbound-emails
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/aws/ses/send
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-BuildSesEmailPayload
+    - name: JS-GenerateAwsSigV4
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://email.{aws.region}.amazonaws.com/v2/email/outbound-emails
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-BuildSesEmailPayload
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-BuildSesEmailPayload
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-BuildSesEmailPayload
+      Properties: {}
+      Source: "// JS-BuildSesEmailPayload - Custom logic for aws-ses-email-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"aws-ses-email-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"aws-ses-email-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"aws-ses-email-proxy\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-BuildSesEmailPayload: \" + err);\n}\n"
+- name: JS-GenerateAwsSigV4
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-GenerateAwsSigV4
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-GenerateAwsSigV4
+      Properties: {}
+      Source: "// JS-GenerateAwsSigV4 - Custom logic for aws-ses-email-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"aws-ses-email-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"aws-ses-email-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"aws-ses-email-proxy\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-GenerateAwsSigV4: \" + err);\n}\n"
+resources: []
+tests: []

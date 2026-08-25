@@ -1,0 +1,111 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: circuit-breaker-failover
+displayName: Circuit Breaker & Automatic Target Failover
+type: feature
+description: Monitors target HTTP 5xx error rates and timeouts, tripping a circuit breaker to divert traffic to a cached fallback
+  or secondary datacenter.
+categories:
+- draft
+- traffic
+parameters:
+- name: TargetEndpointUrl
+  default: https://primary-target.internal
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/traffic/circuit-breaker
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-CheckCircuitState
+    - name: AM-RouteToSecondaryTarget
+    - name: JS-UpdateCircuitMetrics
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://primary-target.internal
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-CheckCircuitState
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-CheckCircuitState
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-CheckCircuitState
+      Properties: {}
+      Source: "// JS-CheckCircuitState - Custom logic for circuit-breaker-failover\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"circuit-breaker-failover.processed\"\
+        , \"true\");\n    context.setVariable(\"circuit-breaker-failover.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"circuit-breaker-failover\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-CheckCircuitState: \" + err);\n}\n"
+- name: AM-RouteToSecondaryTarget
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-RouteToSecondaryTarget
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-RouteToSecondaryTarget
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: circuit-breaker-failover
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-UpdateCircuitMetrics
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-UpdateCircuitMetrics
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-UpdateCircuitMetrics
+      Properties: {}
+      Source: "// JS-UpdateCircuitMetrics - Custom logic for circuit-breaker-failover\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"circuit-breaker-failover.processed\"\
+        , \"true\");\n    context.setVariable(\"circuit-breaker-failover.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"circuit-breaker-failover\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-UpdateCircuitMetrics: \" + err);\n}\n"
+resources: []
+tests: []

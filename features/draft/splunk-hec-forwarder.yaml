@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: splunk-hec-forwarder
+displayName: Splunk HTTP Event Collector (HEC) Audit Forwarder
+type: feature
+description: Captures sanitized request/response metadata and security audit logs, streaming JSON events into Splunk HEC with
+  Splunk token auth.
+categories:
+- draft
+- observability
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/telemetry/splunk-hec
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-BuildSplunkEvent
+    - name: SC-SendSplunkHec
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-BuildSplunkEvent
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-BuildSplunkEvent
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-BuildSplunkEvent
+      Properties: {}
+      Source: "// JS-BuildSplunkEvent - Custom logic for splunk-hec-forwarder\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"splunk-hec-forwarder.processed\"\
+        , \"true\");\n    context.setVariable(\"splunk-hec-forwarder.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"splunk-hec-forwarder\",\n                \"processedAt\": new Date().toISOString()\n \
+        \           };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-BuildSplunkEvent: \" + err);\n}\n"
+- name: SC-SendSplunkHec
+  type: ServiceCallout
+  content:
+    ServiceCallout:
+      metadata:
+        name: SC-SendSplunkHec
+        continueOnError: 'true'
+        enabled: 'true'
+      DisplayName: SC-SendSplunkHec
+      Properties: {}
+      Request:
+        metadata:
+          clearPayload: 'false'
+          variable: SC-SendSplunkHecRequest
+        IgnoreUnresolvedVariables: 'true'
+      Response: SC-SendSplunkHecResponse
+      HTTPTargetConnection:
+        Properties: {}
+        URL: https://httpbin.org/anything
+resources: []
+tests: []

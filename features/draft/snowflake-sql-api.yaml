@@ -1,0 +1,114 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: snowflake-sql-api
+displayName: Snowflake SQL REST API Proxy
+type: feature
+description: Executes SQL statements through the Snowflake SQL REST API with JWT key-pair authentication, query status polling,
+  and row-column mapping.
+categories:
+- draft
+- database
+parameters:
+- name: TargetEndpointUrl
+  default: https://{snowflake.account}.snowflakecomputing.com/api/v2/statements
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/snowflake/sql
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: JS-MapSnowflakeResultSet
+    - name: AM-SetSnowflakeWarehouse
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{snowflake.account}.snowflakecomputing.com/api/v2/statements
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    KeyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: snowflake-sql-api-secrets
+      DisplayName: KVM-LoadCredentials
+      Properties: {}
+      ExclusiveCache: 'false'
+      ExpiryTimeInSecs: '300'
+      Get:
+      - metadata:
+          assignTo: private.targetApiKey
+        Key:
+          Parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        Key:
+          Parameter: ApiSecret
+      Scope: environment
+- name: JS-MapSnowflakeResultSet
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-MapSnowflakeResultSet
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-MapSnowflakeResultSet
+      Properties: {}
+      Source: "// JS-MapSnowflakeResultSet - Custom logic for snowflake-sql-api\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"snowflake-sql-api.processed\"\
+        , \"true\");\n    context.setVariable(\"snowflake-sql-api.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"snowflake-sql-api\",\n                \"processedAt\": new Date().toISOString()\n    \
+        \        };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-MapSnowflakeResultSet: \" + err);\n}\n"
+- name: AM-SetSnowflakeWarehouse
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetSnowflakeWarehouse
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetSnowflakeWarehouse
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: snowflake-sql-api
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

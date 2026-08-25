@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: slack-webhook-proxy
+displayName: Slack Incoming Webhook & Bot Proxy
+type: feature
+description: Transforms simple alerts into Slack Block Kit interactive message payloads and dispatches them via Slack Webhooks
+  or Web API.
+categories:
+- draft
+- saas
+parameters:
+- name: TargetEndpointUrl
+  default: https://hooks.slack.com/services/{slack.path}
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/slack/notify
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-BuildSlackBlockKitPayload
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://hooks.slack.com/services/{slack.path}
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-BuildSlackBlockKitPayload
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-BuildSlackBlockKitPayload
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-BuildSlackBlockKitPayload
+      Properties: {}
+      Source: "// JS-BuildSlackBlockKitPayload - Custom logic for slack-webhook-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"slack-webhook-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"slack-webhook-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"slack-webhook-proxy\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-BuildSlackBlockKitPayload: \" + err);\n}\n"
+resources: []
+tests: []

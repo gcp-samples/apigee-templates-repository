@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: request-replay-recorder
+displayName: Request Capture & Dead Letter Queue (DLQ) Recorder
+type: feature
+description: Captures failed client requests (HTTP 5xx, timeouts) and forwards the original method, headers, and body to a
+  Google Cloud Pub/Sub DLQ for replay.
+categories:
+- draft
+- observability
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/telemetry/dlq-recorder
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-CaptureFailedRequest
+    - name: SC-PublishToDlqTopic
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-CaptureFailedRequest
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-CaptureFailedRequest
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-CaptureFailedRequest
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-CaptureFailedRequest
+      Properties: {}
+      Source: "// JS-CaptureFailedRequest - Custom logic for request-replay-recorder\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"request-replay-recorder.processed\"\
+        , \"true\");\n    context.setVariable(\"request-replay-recorder.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"request-replay-recorder\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-CaptureFailedRequest: \" + err);\n}\n"
+- name: SC-PublishToDlqTopic
+  type: ServiceCallout
+  content:
+    ServiceCallout:
+      metadata:
+        name: SC-PublishToDlqTopic
+        continueOnError: 'true'
+        enabled: 'true'
+      DisplayName: SC-PublishToDlqTopic
+      Properties: {}
+      Request:
+        metadata:
+          clearPayload: 'false'
+          variable: SC-PublishToDlqTopicRequest
+        IgnoreUnresolvedVariables: 'true'
+      Response: SC-PublishToDlqTopicResponse
+      HTTPTargetConnection:
+        Properties: {}
+        URL: https://httpbin.org/anything
+resources: []
+tests: []

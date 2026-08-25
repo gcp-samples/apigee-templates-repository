@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: cassandra-stargate-proxy
+displayName: Apache Cassandra Stargate Document Proxy
+type: feature
+description: Proxies Apache Cassandra / DataStax Astra Stargate Document API with token lifecycle handling and CQL-to-JSON
+  object mapping.
+categories:
+- draft
+- database
+parameters:
+- name: TargetEndpointUrl
+  default: https://{stargate.host}/v2/namespaces/{stargate.keyspace}/collections
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/cassandra/docs
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: JS-FormatCassandraDocs
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatCassandraDocs
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{stargate.host}/v2/namespaces/{stargate.keyspace}/collections
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    KeyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: cassandra-stargate-proxy-secrets
+      DisplayName: KVM-LoadCredentials
+      Properties: {}
+      ExclusiveCache: 'false'
+      ExpiryTimeInSecs: '300'
+      Get:
+      - metadata:
+          assignTo: private.targetApiKey
+        Key:
+          Parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        Key:
+          Parameter: ApiSecret
+      Scope: environment
+- name: JS-FormatCassandraDocs
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-FormatCassandraDocs
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-FormatCassandraDocs
+      Properties: {}
+      Source: "// JS-FormatCassandraDocs - Custom logic for cassandra-stargate-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"cassandra-stargate-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"cassandra-stargate-proxy.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"cassandra-stargate-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatCassandraDocs: \" + err);\n}\n"
+resources: []
+tests: []

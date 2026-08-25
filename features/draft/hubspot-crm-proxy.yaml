@@ -1,0 +1,114 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: hubspot-crm-proxy
+displayName: HubSpot CRM Contacts & Deals API Proxy
+type: feature
+description: Proxies HubSpot CRM v3 REST API with private app token authentication, rate limit backoff handling, and property
+  mapping.
+categories:
+- draft
+- saas
+parameters:
+- name: TargetEndpointUrl
+  default: https://api.hubapi.com/crm/v3
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/hubspot/crm
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: AM-SetHubSpotAuth
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatHubSpotResponse
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://api.hubapi.com/crm/v3
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    KeyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: hubspot-crm-proxy-secrets
+      DisplayName: KVM-LoadCredentials
+      Properties: {}
+      ExclusiveCache: 'false'
+      ExpiryTimeInSecs: '300'
+      Get:
+      - metadata:
+          assignTo: private.targetApiKey
+        Key:
+          Parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        Key:
+          Parameter: ApiSecret
+      Scope: environment
+- name: AM-SetHubSpotAuth
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetHubSpotAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetHubSpotAuth
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: hubspot-crm-proxy
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatHubSpotResponse
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-FormatHubSpotResponse
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-FormatHubSpotResponse
+      Properties: {}
+      Source: "// JS-FormatHubSpotResponse - Custom logic for hubspot-crm-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"hubspot-crm-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"hubspot-crm-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"hubspot-crm-proxy\",\n                \"processedAt\": new Date().toISOString()\n    \
+        \        };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatHubSpotResponse: \" + err);\n}\n"
+resources: []
+tests: []

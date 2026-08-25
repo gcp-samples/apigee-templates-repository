@@ -1,0 +1,85 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: aws-eventbridge-proxy
+displayName: AWS EventBridge Event Ingestion Proxy
+type: feature
+description: Ingests custom enterprise application events into AWS EventBridge event buses with schema validation and SigV4
+  authentication.
+categories:
+- draft
+- aws
+parameters:
+- name: TargetEndpointUrl
+  default: https://events.{aws.region}.amazonaws.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/aws/eventbridge/put
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-BuildEventBridgePayload
+    - name: JS-GenerateAwsSigV4
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://events.{aws.region}.amazonaws.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-BuildEventBridgePayload
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-BuildEventBridgePayload
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-BuildEventBridgePayload
+      Properties: {}
+      Source: "// JS-BuildEventBridgePayload - Custom logic for aws-eventbridge-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"aws-eventbridge-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"aws-eventbridge-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"aws-eventbridge-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-BuildEventBridgePayload: \" + err);\n}\n"
+- name: JS-GenerateAwsSigV4
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-GenerateAwsSigV4
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-GenerateAwsSigV4
+      Properties: {}
+      Source: "// JS-GenerateAwsSigV4 - Custom logic for aws-eventbridge-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"aws-eventbridge-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"aws-eventbridge-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"aws-eventbridge-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-GenerateAwsSigV4: \" + err);\n}\n"
+resources: []
+tests: []

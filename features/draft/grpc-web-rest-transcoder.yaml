@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: grpc-web-rest-transcoder
+displayName: REST to gRPC-Web Gateway Transcoder
+type: feature
+description: Accepts standard REST JSON requests, converts payloads into Protobuf binary or gRPC-Web JSON format, and calls
+  gRPC-Web proxy backends.
+categories:
+- draft
+- transformation
+parameters:
+- name: TargetEndpointUrl
+  default: https://grpc-backend.internal:8080/package.Service/Method
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/integration/grpc-transcode
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: AM-SetGrpcWebHeaders
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatGrpcResponse
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://grpc-backend.internal:8080/package.Service/Method
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: AM-SetGrpcWebHeaders
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetGrpcWebHeaders
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetGrpcWebHeaders
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: grpc-web-rest-transcoder
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-FormatGrpcResponse
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-FormatGrpcResponse
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-FormatGrpcResponse
+      Properties: {}
+      Source: "// JS-FormatGrpcResponse - Custom logic for grpc-web-rest-transcoder\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"grpc-web-rest-transcoder.processed\"\
+        , \"true\");\n    context.setVariable(\"grpc-web-rest-transcoder.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"grpc-web-rest-transcoder\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatGrpcResponse: \" + err);\n}\n"
+resources: []
+tests: []

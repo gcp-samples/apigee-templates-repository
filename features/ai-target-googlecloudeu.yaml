@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+type: feature
+description: Proxy for Google Cloud Model Garden models.
+endpoints:
+  - name: googlecloudeu
+    basePath: /v1/projects
+    routes:
+      - name: googlecloudeu
+        target: googlecloudeu
+    flows: []
+    faultRules: []
+parameters: []
+targets:
+  - name: googlecloud
+    url: https://aiplatform.eu.rep.googleapis.com/v1/projects
+    flows: []
+    faultRules: []
+policies: []
+resources: []
+tests: []

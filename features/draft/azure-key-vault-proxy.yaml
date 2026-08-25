@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: azure-key-vault-proxy
+displayName: Azure Key Vault Secret Retrieval & Cache
+type: feature
+description: Retrieves secrets and certificates from Azure Key Vault REST API using Entra ID OAuth tokens with Apigee response
+  caching.
+categories:
+- draft
+- azure
+parameters:
+- name: TargetEndpointUrl
+  default: https://{azure.vaultName}.vault.azure.net/secrets/{secret.name}?api-version=7.4
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/azure/keyvault/secrets
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: AM-SetAzureOAuthHeader
+    - name: JS-ExtractKeyVaultSecret
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{azure.vaultName}.vault.azure.net/secrets/{secret.name}?api-version=7.4
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: AM-SetAzureOAuthHeader
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetAzureOAuthHeader
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetAzureOAuthHeader
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: azure-key-vault-proxy
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-ExtractKeyVaultSecret
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-ExtractKeyVaultSecret
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-ExtractKeyVaultSecret
+      Properties: {}
+      Source: "// JS-ExtractKeyVaultSecret - Custom logic for azure-key-vault-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"azure-key-vault-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"azure-key-vault-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"azure-key-vault-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-ExtractKeyVaultSecret: \" + err);\n}\n"
+resources: []
+tests: []

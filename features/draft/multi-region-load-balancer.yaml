@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: multi-region-load-balancer
+displayName: Multi-Region Target Load Balancer & Health Check
+type: feature
+description: Distributes incoming traffic across multiple GCP regions (us-central1, europe-west1, asia-east1) with weighted
+  round-robin and health failover.
+categories:
+- draft
+- traffic
+parameters:
+- name: TargetEndpointUrl
+  default: https://us-central1.backend.internal
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/traffic/load-balanced
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-SelectHealthyTarget
+    - name: AM-SetTargetUrl
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://us-central1.backend.internal
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-SelectHealthyTarget
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-SelectHealthyTarget
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-SelectHealthyTarget
+      Properties: {}
+      Source: "// JS-SelectHealthyTarget - Custom logic for multi-region-load-balancer\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"multi-region-load-balancer.processed\"\
+        , \"true\");\n    context.setVariable(\"multi-region-load-balancer.timestamp\", Date.now().toString());\n    \n  \
+        \  // Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n \
+        \   if (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"multi-region-load-balancer\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-SelectHealthyTarget: \" + err);\n}\n"
+- name: AM-SetTargetUrl
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetTargetUrl
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetTargetUrl
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: multi-region-load-balancer
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: faunadb-graphql-proxy
+displayName: FaunaDB Document Database Proxy
+type: feature
+description: Proxies FaunaDB HTTP GraphQL & FQL endpoints with Secret Key injection and cursor-based pagination normalization.
+categories:
+- draft
+- database
+parameters:
+- name: TargetEndpointUrl
+  default: https://db.fauna.com/graphql
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/faunadb
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatFaunaResponse
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://db.fauna.com/graphql
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    KeyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: faunadb-graphql-proxy-secrets
+      DisplayName: KVM-LoadCredentials
+      Properties: {}
+      ExclusiveCache: 'false'
+      ExpiryTimeInSecs: '300'
+      Get:
+      - metadata:
+          assignTo: private.targetApiKey
+        Key:
+          Parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        Key:
+          Parameter: ApiSecret
+      Scope: environment
+- name: JS-FormatFaunaResponse
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-FormatFaunaResponse
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-FormatFaunaResponse
+      Properties: {}
+      Source: "// JS-FormatFaunaResponse - Custom logic for faunadb-graphql-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"faunadb-graphql-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"faunadb-graphql-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"faunadb-graphql-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatFaunaResponse: \" + err);\n}\n"
+resources: []
+tests: []

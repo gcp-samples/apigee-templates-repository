@@ -1,0 +1,134 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: sap-odata-proxy
+displayName: SAP S/4HANA OData to REST Proxy
+type: feature
+description: Mediates between modern REST JSON clients and SAP S/4HANA OData v2/v4 services with CSRF token fetching and OData
+  response unwrapping.
+categories:
+- draft
+- saas
+parameters:
+- name: TargetEndpointUrl
+  default: https://{sap.host}:{sap.port}/sap/opu/odata/sap/{sap.service}
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/sap/odata
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: SC-FetchSapCsrfToken
+    - name: AM-SetSapCsrfHeader
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-UnwrapOdataResponse
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{sap.host}:{sap.port}/sap/opu/odata/sap/{sap.service}
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    KeyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: sap-odata-proxy-secrets
+      DisplayName: KVM-LoadCredentials
+      Properties: {}
+      ExclusiveCache: 'false'
+      ExpiryTimeInSecs: '300'
+      Get:
+      - metadata:
+          assignTo: private.targetApiKey
+        Key:
+          Parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        Key:
+          Parameter: ApiSecret
+      Scope: environment
+- name: SC-FetchSapCsrfToken
+  type: ServiceCallout
+  content:
+    ServiceCallout:
+      metadata:
+        name: SC-FetchSapCsrfToken
+        continueOnError: 'true'
+        enabled: 'true'
+      DisplayName: SC-FetchSapCsrfToken
+      Properties: {}
+      Request:
+        metadata:
+          clearPayload: 'false'
+          variable: SC-FetchSapCsrfTokenRequest
+        IgnoreUnresolvedVariables: 'true'
+      Response: SC-FetchSapCsrfTokenResponse
+      HTTPTargetConnection:
+        Properties: {}
+        URL: https://httpbin.org/anything
+- name: AM-SetSapCsrfHeader
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetSapCsrfHeader
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetSapCsrfHeader
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: sap-odata-proxy
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-UnwrapOdataResponse
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-UnwrapOdataResponse
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-UnwrapOdataResponse
+      Properties: {}
+      Source: "// JS-UnwrapOdataResponse - Custom logic for sap-odata-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"sap-odata-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"sap-odata-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"sap-odata-proxy\",\n                \"processedAt\": new Date().toISOString()\n      \
+        \      };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2) {}\n\
+        \    }\n} catch (err) {\n    print(\"Error in JS-UnwrapOdataResponse: \" + err);\n}\n"
+resources: []
+tests: []

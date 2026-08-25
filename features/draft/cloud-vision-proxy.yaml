@@ -1,0 +1,69 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: cloud-vision-proxy
+displayName: Cloud Vision AI OCR & Label Proxy
+type: feature
+description: Accepts base64 images or Cloud Storage URIs and queries Google Cloud Vision API for OCR text extraction, label
+  annotations, and safe search detection.
+categories:
+- draft
+- gcp
+parameters:
+- name: TargetEndpointUrl
+  default: https://vision.googleapis.com/v1/images:annotate
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/vision/annotate
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-FormatVisionResults
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatVisionResults
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://vision.googleapis.com/v1/images:annotate
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+    authentication:
+      googleAccessToken:
+        scopes:
+          scope: https://www.googleapis.com/auth/cloud-platform
+endpoints: []
+targets: []
+policies:
+- name: JS-FormatVisionResults
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-FormatVisionResults
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-FormatVisionResults
+      Properties: {}
+      Source: "// JS-FormatVisionResults - Custom logic for cloud-vision-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"cloud-vision-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"cloud-vision-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"cloud-vision-proxy\",\n                \"processedAt\": new Date().toISOString()\n   \
+        \         };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatVisionResults: \" + err);\n}\n"
+resources: []
+tests: []

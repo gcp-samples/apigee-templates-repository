@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: csv-to-json-transformer
+displayName: CSV Stream to JSON Array Converter
+type: feature
+description: Parses incoming multipart or raw CSV data streams and translates records into structured JSON object arrays with
+  header detection.
+categories:
+- draft
+- transformation
+parameters:
+- name: TargetEndpointUrl
+  default: https://json-backend.internal/api/batch
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/integration/csv-to-json
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-ConvertCsvToJson
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://json-backend.internal/api/batch
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-ConvertCsvToJson
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-ConvertCsvToJson
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-ConvertCsvToJson
+      Properties: {}
+      Source: "// JS-ConvertCsvToJson - Custom logic for csv-to-json-transformer\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"csv-to-json-transformer.processed\"\
+        , \"true\");\n    context.setVariable(\"csv-to-json-transformer.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"csv-to-json-transformer\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-ConvertCsvToJson: \" + err);\n}\n"
+resources: []
+tests: []

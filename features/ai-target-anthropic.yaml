@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+type: feature
+description: Proxy for Anthropic models.
+endpoints:
+  - name: anthropic
+    basePath: /v1/messages
+    routes:
+      - name: anthropic
+        target: anthropic
+    flows: []
+    faultRules: []
+parameters: []
+targets:
+  - name: anthropic
+    url: https://api.anthropic.com/v1/messages
+    flows:
+      - name: PreFlow
+        mode: Request
+        steps:
+          - name: KVM-LoadCredentials
+          - name: AM-SetHeader
+    faultRules: []
+policies:
+  - name: KVM-LoadCredentials
+    type: KeyValueMapOperations
+    content:
+      KeyValueMapOperations:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: KVM-LoadCredentials
+          mapIdentifier: AI-Secrets
+        DisplayName: KVM-LoadCredentials
+        Properties: {}
+        ExclusiveCache: "false"
+        ExpiryTimeInSecs: "10"
+        Get:
+          - metadata:
+              assignTo: ai.anthropicKey
+            Key:
+              Parameter: Anthropic_Key
+        Scope: environment
+  - name: AM-SetHeader
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: AM-SetHeader
+        DisplayName: AM-SetHeader
+        Properties: {}
+        Set:
+          Headers:
+            Header:
+              metadata:
+                name: x-api-key
+              _text: "{ai.anthropicKey}"
+        IgnoreUnresolvedVariables: "true"
+        AssignTo:
+          metadata:
+            createNew: "false"
+            transport: http
+            type: request
+resources: []
+tests: []

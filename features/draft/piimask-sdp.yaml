@@ -1,0 +1,297 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+type: feature
+parameters: []
+defaultEndpoint:
+  name: default
+  basePath: /ai-pii-masking
+  routes:
+    - name: default
+      target: default
+  flows:
+    - name: PreFlow
+      mode: Request
+      steps:
+        - name: KVM-LoadConfig
+        - name: AM-SetVariables
+        - name: JS-CheckModel
+        - name: JS-GetRequest
+        - name: SC-SensitiveDataProtection
+          condition: sdp.text != null and sdp.text != ""
+        - name: JS-SetMaskedRequest
+          condition: sdp.text != null and sdp.text != ""
+    - name: PostFlow
+      mode: Response
+      steps:
+        - name: JS-GetResponse
+        - name: SC-SensitiveDataProtection
+          condition: sdp.text != null and sdp.text != ""
+        - name: JS-SetResponse
+          condition: sdp.text != null and sdp.text != ""
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://aiplatform.googleapis.com
+  flows:
+    - name: PostFlow
+      mode: Response
+      steps:
+        - name: JS-Analytics
+          condition: response.content != ""
+        - name: DC-TokenAnalytics
+          condition: ai.usageDataFound = "true"
+        - name: JS-ResetUsageDataFound
+          condition: ai.usageDataFound = "true"
+    - name: EventFlow
+      mode: Response
+      steps:
+        - name: JS-Analytics
+        - name: DC-TokenAnalytics
+          condition: ai.usageDataFound = "true"
+        - name: JS-ResetUsageDataFound
+          condition: ai.usageDataFound = "true"
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+  - name: JS-ResetUsageDataFound
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ResetUsageDataFound
+        DisplayName: JS-ResetUsageDataFound
+        Properties: {}
+        Source: |
+          context.setVariable("ai.usageDataFound", "false");
+  - name: JS-GetRequest
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "false"
+          timeLimit: "200"
+          name: JS-GetRequest
+        DisplayName: JS-GetRequest
+        Properties: {}
+        Source: "
+
+          \    var prompt = context.getVariable(\"ai.requestPrompt\");
+
+          \    context.setVariable(\"sdp.text\", JSON.stringify(prompt));
+
+          \  "
+        IncludeURL: jsc://ai-functions.js
+  - name: JS-GetResponse
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-GetResponse
+        DisplayName: JS-GetResponse
+        Properties: {}
+        Source: "
+
+          \    var responseContent = response.content.asJSON;
+
+          \    var responseText = getResponse(responseContent);
+
+          \    context.setVariable(\"sdp.text\", JSON.stringify(responseText));
+
+          \  "
+        IncludeURL: jsc://ai-functions.js
+  - name: JS-SetMaskedRequest
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-SetMaskedRequest
+        DisplayName: JS-SetMaskedRequest
+        Properties: {}
+        Source: "     var maskedResponseObj =
+          JSON.parse(context.getVariable(\"sensitiveDataProtectionResponse.cont\
+          ent\"));
+
+          \    print(\"Masked response JSON: \"+
+          JSON.stringify(maskedResponseObj));
+
+
+          \    if (maskedResponseObj[\"item\"]) {
+
+          \      if (maskedResponseObj[\"item\"][\"value\"]) {
+
+          \        var requestContent = request.content.asJSON;
+
+          \        var maskedRequestContent = setPrompt(requestContent,
+          maskedResponseObj[\"item\"][\"value\"]);
+
+          \        context.setVariable('request.content',
+          JSON.stringify(maskedRequestContent));
+
+          \      }
+
+          \    }
+
+          \  "
+        IncludeURL: jsc://ai-functions.js
+  - name: JS-SetResponse
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-SetResponse
+        DisplayName: JS-SetResponse
+        Properties: {}
+        Source: "
+
+          \    var maskedResponseObj =
+          JSON.parse(context.getVariable(\"sensitiveDataProtectionResponse.cont\
+          ent\"));
+
+          \    var responseContent = response.content.asJSON;
+
+          \        if (maskedResponseObj[\"item\"]) {
+
+          \      if (maskedResponseObj[\"item\"][\"value\"]) {
+
+          \        var maskedResponse = setResponse(responseContent,
+          maskedResponseObj[\"item\"][\"value\"]);
+
+          \        context.setVariable(\"response.content\",
+          JSON.stringify(maskedResponse));
+
+          \      }
+
+          \    }
+
+          \  "
+        IncludeURL: jsc://ai-functions.js
+  - name: SC-SensitiveDataProtection
+    type: ServiceCallout
+    content:
+      ServiceCallout:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: SC-SensitiveDataProtection
+        DisplayName: SC-SensitiveDataProtection
+        Properties: {}
+        Request:
+          metadata:
+            clearPayload: "true"
+            variable: myRequest
+          IgnoreUnresolvedVariables: "false"
+          Set:
+            Verb: POST
+            Payload:
+              metadata:
+                contentType: application/json
+              Value: "
+
+                \        {
+
+                \          \"item\": {
+
+                \            \"value\": {sdp.text}
+
+                \          },
+
+                \          \"deidentifyConfig\":{
+
+                \            \"infoTypeTransformations\":{
+
+                \              \"transformations\":[
+
+                \                {
+
+                \                  \"infoTypes\":[
+
+                \                    {
+
+                \                      \"name\":\"EMAIL_ADDRESS\"
+
+                \                    }
+
+                \                  ],
+
+                \                  \"primitiveTransformation\":{
+
+                \                    \"characterMaskConfig\":{
+
+                \                      \"maskingCharacter\":\"*\",
+
+                \                      \"reverseOrder\":false,
+
+                \                      \"charactersToIgnore\":[
+
+                \                        {
+
+                \                          \"charactersToSkip\":\"@\"
+
+                \                        }
+
+                \                      ]
+
+                \                    }
+
+                \                  }
+
+                \                }
+
+                \              ]
+
+                \            }
+
+                \          },
+
+                \          \"inspectConfig\": {
+
+                \            \"infoTypes\": [
+
+                \              {
+
+                \                \"name\":\"EMAIL_ADDRESS\"
+
+                \              }
+
+                \            ],
+
+                \            \"minLikelihood\": \"POSSIBLE\",
+
+                \            \"limits\": {
+
+                \              \"maxFindingsPerItem\": 0
+
+                \            },
+
+                \            \"includeQuote\": true
+
+                \          }
+
+                \        }
+
+                \      "
+        Response: sensitiveDataProtectionResponse
+        HTTPTargetConnection:
+          Properties: {}
+          URL: https://dlp.googleapis.com/v2/projects/{organization.name}/content:deidentify
+          Authentication:
+            GoogleAccessToken:
+              Scopes:
+                Scope: https://www.googleapis.com/auth/cloud-platform
+resources:
+tests: []

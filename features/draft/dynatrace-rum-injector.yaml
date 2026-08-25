@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: dynatrace-rum-injector
+displayName: Dynatrace RUM & Server Timing Injector
+type: feature
+description: Injects Dynatrace OneAgent correlation headers (`x-dynatrace-test`) and Server-Timing performance breakdown metrics
+  in responses.
+categories:
+- draft
+- observability
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/telemetry/dynatrace
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: AM-SetDynatraceHeaders
+    - name: JS-ComputeServerTiming
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: AM-SetDynatraceHeaders
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetDynatraceHeaders
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetDynatraceHeaders
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: dynatrace-rum-injector
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+- name: JS-ComputeServerTiming
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-ComputeServerTiming
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-ComputeServerTiming
+      Properties: {}
+      Source: "// JS-ComputeServerTiming - Custom logic for dynatrace-rum-injector\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"dynatrace-rum-injector.processed\"\
+        , \"true\");\n    context.setVariable(\"dynatrace-rum-injector.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"dynatrace-rum-injector\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-ComputeServerTiming: \" + err);\n}\n"
+resources: []
+tests: []

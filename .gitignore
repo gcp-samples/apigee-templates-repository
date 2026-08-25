@@ -4,3 +4,4 @@ coverage/
 *.log
 __pycache__
 .env
+*.local.*

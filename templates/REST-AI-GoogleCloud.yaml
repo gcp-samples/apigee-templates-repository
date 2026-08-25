@@ -1,12 +1,12 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
-name: REST-AI-Completions
+name: REST-AI-GoogleCloud
 type: template
-description: API template for REST-AI-Completions
+description: API template for REST-AI-GoogleCloud
 gateway: apigee
 schemaVersion: 1.0.0
 features:
-  - ../features/ai-pre-validate.yaml
   - ../features/ai-completions.yaml
+  - ../features/ai-pre-validate.yaml
+  - ../features/ai-failover.yaml
   - ../features/ai-post-analytics.yaml
 parameters:
   - name: ModelRouting
@@ -18,25 +18,25 @@ endpoints:
     basePath: /v1/chat/completions
     routes:
       - name: route-googlecloud
-        target: googlecloud
         condition: target.route = "googlecloud"
+        target: googlecloud
       - name: route-googlecloud-oai
-        target: googlecloud-oai
         condition: target.route = "googlecloud-oai"
+        target: googlecloud-oai
       - name: route-openai
-        target: openai
         condition: target.route = "openai"
+        target: openai
       - name: route-anthropic
-        target: anthropic
         condition: target.route = "anthropic"
+        target: anthropic
       - name: default
         target: googlecloud
 targets:
-  - name: anthropic
-    url: https://api.anthropic.com
   - name: googlecloud-oai
     url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/endpoints/openapi/chat/completions
-  - name: googlecloud
-    url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
+  - name: anthropic
+    url: https://api.anthropic.com
   - name: openai
     url: https://api.openai.com
+  - name: googlecloud
+    url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}

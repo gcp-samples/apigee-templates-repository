@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: response-cache-invalidation
+displayName: Response Cache with Dynamic Invalidation
+type: feature
+description: Caches GET query responses using Apigee ResponseCache policy, with support for instant cache invalidation on
+  PUT/POST/DELETE mutations.
+categories:
+- draft
+- traffic
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com/items
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/traffic/cached-resource
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: Invalidate-Cache-Policy
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: Response-Cache-Policy
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com/items
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: Response-Cache-Policy
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: Response-Cache-Policy
+        continueOnError: 'true'
+        enabled: 'true'
+      DisplayName: Response-Cache-Policy
+      Properties: {}
+      AssignVariable:
+        Name: response-cache-invalidation.trafficState
+        Value: healthy
+- name: Invalidate-Cache-Policy
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: Invalidate-Cache-Policy
+        continueOnError: 'true'
+        enabled: 'true'
+      DisplayName: Invalidate-Cache-Policy
+      Properties: {}
+      AssignVariable:
+        Name: response-cache-invalidation.trafficState
+        Value: healthy
+resources: []
+tests: []

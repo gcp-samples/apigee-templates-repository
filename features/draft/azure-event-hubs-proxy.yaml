@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: azure-event-hubs-proxy
+displayName: Azure Event Hubs Telemetry Stream Proxy
+type: feature
+description: Streams event telemetry batches into Azure Event Hubs with partition key distribution, SAS token signing, and
+  JSON batching.
+categories:
+- draft
+- azure
+parameters:
+- name: TargetEndpointUrl
+  default: https://{azure.ehNamespace}.servicebus.windows.net/{azure.ehHub}/messages
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/azure/eventhubs/send
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-GenerateServiceBusSasToken
+    - name: AM-SetEventHubHeaders
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{azure.ehNamespace}.servicebus.windows.net/{azure.ehHub}/messages
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-GenerateServiceBusSasToken
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-GenerateServiceBusSasToken
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-GenerateServiceBusSasToken
+      Properties: {}
+      Source: "// JS-GenerateServiceBusSasToken - Custom logic for azure-event-hubs-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"azure-event-hubs-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"azure-event-hubs-proxy.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"azure-event-hubs-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-GenerateServiceBusSasToken: \" + err);\n}\n"
+- name: AM-SetEventHubHeaders
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetEventHubHeaders
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetEventHubHeaders
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: azure-event-hubs-proxy
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

@@ -1,0 +1,116 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+name: ai-failover
+displayName: AI Target Failover Handler
+type: feature
+description: Intercepts target failures in defaultFaultRule and executes failover routing to Google Cloud Vertex AI OpenAI endpoint.
+documentation: ""
+gateway: apigee
+schemaVersion: 1.0.0
+categories:
+  - ai
+  - traffic
+parameters: []
+defaultEndpoint:
+  name: default
+  basePath: /ai-failover
+  routes:
+    - name: default
+      target: default
+  flows: []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://nonexistent-primary-target-ai-failover.invalid/v1/chat/completions
+  flows:
+    - name: PostFlow
+      mode: Response
+      steps: []
+  defaultFaultRule:
+    name: default-fault
+    steps:
+      - name: SC-Failover-GoogleCloud-OAI
+      - name: JS-SetFailoverResponse
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+  - name: SC-Failover-GoogleCloud-OAI
+    type: ServiceCallout
+    content:
+      ServiceCallout:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: SC-Failover-GoogleCloud-OAI
+        DisplayName: SC-Failover-GoogleCloud-OAI
+        Properties: {}
+        Request:
+          metadata:
+            clearPayload: "true"
+            variable: failoverRequest
+          IgnoreUnresolvedVariables: "false"
+          Set:
+            Verb: POST
+            Headers:
+              Header:
+                - Name: Content-Type
+                  Value: application/json
+            Payload:
+              metadata:
+                contentType: application/json
+              Value: |
+                {
+                  "model": "gemini-3.7-flash,
+                  "messages": [
+                    {
+                      "role": "user",
+                      "content": "{ai.requestPrompt}"
+                    }
+                  ],
+                  "stream": false
+                }
+        Response: failoverResponse
+        HTTPTargetConnection:
+          Properties: {}
+          URL: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/endpoints/openapi/chat/completions
+          Authentication:
+            GoogleAccessToken:
+              Scopes:
+                Scope: https://www.googleapis.com/auth/cloud-platform
+  - name: JS-SetFailoverResponse
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-SetFailoverResponse
+        DisplayName: JS-SetFailoverResponse
+        Properties: {}
+        Source: |
+          var failoverContent = context.getVariable("failoverResponse.content");
+          var failoverStatusCode = context.getVariable("failoverResponse.status.code");
+
+          if (failoverContent) {
+            response.content = failoverContent;
+            var statusCode = failoverStatusCode ? parseInt(failoverStatusCode, 10) : 200;
+            context.setVariable("response.status.code", statusCode);
+            context.setVariable("message.status.code", statusCode);
+            context.setVariable("response.header.Content-Type", "application/json");
+            context.setVariable("response.header.X-Failover-Target", "googlecloud-oai");
+          } else {
+            var errorResponse = {
+              error: {
+                message: "Target invocation failed and failover callout did not return a response.",
+                type: "failover_error",
+                code: 502
+              }
+            };
+            response.content = JSON.stringify(errorResponse);
+            context.setVariable("response.status.code", 502);
+            context.setVariable("message.status.code", 502);
+            context.setVariable("response.header.Content-Type", "application/json");
+          }
+resources: []
+tests: []

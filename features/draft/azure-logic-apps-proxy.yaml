@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: azure-logic-apps-proxy
+displayName: Azure Logic Apps Workflow Trigger
+type: feature
+description: Triggers automated workflows in Azure Logic Apps via HTTP POST trigger endpoints with signature verification
+  and payload normalization.
+categories:
+- draft
+- azure
+parameters:
+- name: TargetEndpointUrl
+  default: https://prod-00.{azure.location}.logic.azure.com/workflows/{azure.workflowId}/triggers/manual/paths/invoke
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/azure/logicapps/trigger
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps: []
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-BuildLogicAppPayload
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://prod-00.{azure.location}.logic.azure.com/workflows/{azure.workflowId}/triggers/manual/paths/invoke
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-BuildLogicAppPayload
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-BuildLogicAppPayload
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-BuildLogicAppPayload
+      Properties: {}
+      Source: "// JS-BuildLogicAppPayload - Custom logic for azure-logic-apps-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"azure-logic-apps-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"azure-logic-apps-proxy.timestamp\", Date.now().toString());\n    \n    //\
+        \ Response processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if\
+        \ (resContent) {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"\
+        ] = {\n                \"feature\": \"azure-logic-apps-proxy\",\n                \"processedAt\": new Date().toISOString()\n\
+        \            };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch\
+        \ (e2) {}\n    }\n} catch (err) {\n    print(\"Error in JS-BuildLogicAppPayload: \" + err);\n}\n"
+resources: []
+tests: []

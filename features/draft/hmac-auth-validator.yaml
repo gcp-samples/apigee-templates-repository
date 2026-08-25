@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: hmac-auth-validator
+displayName: HMAC-SHA256 Request Signature Validator
+type: feature
+description: Validates incoming HTTP request HMAC-SHA256 signatures against request headers, timestamp, nonce, and payload
+  hash with clock-skew defense.
+categories:
+- draft
+- security
+parameters:
+- name: TargetEndpointUrl
+  default: https://backend.example.com
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/security/hmac-validate
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-ValidateHmacSignature
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://backend.example.com
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-ValidateHmacSignature
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-ValidateHmacSignature
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-ValidateHmacSignature
+      Properties: {}
+      Source: "// JS-ValidateHmacSignature - Custom logic for hmac-auth-validator\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"hmac-auth-validator.processed\"\
+        , \"true\");\n    context.setVariable(\"hmac-auth-validator.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"hmac-auth-validator\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-ValidateHmacSignature: \" + err);\n}\n"
+- name: RF-InvalidSignature
+  type: RaiseFault
+  content:
+    RaiseFault:
+      metadata:
+        name: RF-InvalidSignature
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: RF-InvalidSignature
+      Properties: {}
+      FaultResponse:
+        Set:
+          Headers:
+            Header:
+              metadata:
+                name: Content-Type
+              Value: application/json
+          Payload:
+            contentType: application/json
+            Value: '{"error": "RF-InvalidSignature", "message": "Security or validation fault occurred in feature hmac-auth-validator"}'
+          StatusCode: '400'
+          ReasonPhrase: Bad Request
+      IgnoreUnresolvedVariables: 'true'
+resources: []
+tests: []

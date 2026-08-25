@@ -1,0 +1,114 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: neo4j-rest-proxy
+displayName: Neo4j Cypher Transaction API Proxy
+type: feature
+description: Executes Cypher graph queries over the Neo4j HTTP Transaction API with graph node/relationship JSON serialization.
+categories:
+- draft
+- database
+parameters:
+- name: TargetEndpointUrl
+  default: https://{neo4j.host}:7474/db/neo4j/tx/commit
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/neo4j/cypher
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: KVM-LoadCredentials
+    - name: JS-FormatNeo4jGraph
+    - name: AM-SetNeo4jAuth
+  - name: PostFlow
+    mode: Response
+    steps: &id001
+    - name: JS-FormatNeo4jGraph
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{neo4j.host}:7474/db/neo4j/tx/commit
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: KVM-LoadCredentials
+  type: KeyValueMapOperations
+  content:
+    KeyValueMapOperations:
+      metadata:
+        name: KVM-LoadCredentials
+        continueOnError: 'false'
+        enabled: 'true'
+        mapIdentifier: neo4j-rest-proxy-secrets
+      DisplayName: KVM-LoadCredentials
+      Properties: {}
+      ExclusiveCache: 'false'
+      ExpiryTimeInSecs: '300'
+      Get:
+      - metadata:
+          assignTo: private.targetApiKey
+        Key:
+          Parameter: ApiKey
+      - metadata:
+          assignTo: private.targetApiSecret
+        Key:
+          Parameter: ApiSecret
+      Scope: environment
+- name: JS-FormatNeo4jGraph
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-FormatNeo4jGraph
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-FormatNeo4jGraph
+      Properties: {}
+      Source: "// JS-FormatNeo4jGraph - Custom logic for neo4j-rest-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"neo4j-rest-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"neo4j-rest-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"neo4j-rest-proxy\",\n                \"processedAt\": new Date().toISOString()\n     \
+        \       };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-FormatNeo4jGraph: \" + err);\n}\n"
+- name: AM-SetNeo4jAuth
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetNeo4jAuth
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetNeo4jAuth
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: neo4j-rest-proxy
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []

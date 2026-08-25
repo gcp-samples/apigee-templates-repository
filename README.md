@@ -11,6 +11,7 @@ Welcome to the **Apigee Templates Repository** — an enterprise catalogue of mo
 ## Table of Contents
 
 - [Overview & Architecture](#overview--architecture)
+  - [How Templates & Features Work](#how-templates--features-work)
 - [Deploy with Jupyter Notebooks & Google Colab](#deploy-with-jupyter-notebooks--google-colab)
 - [Deploy with gcloud or aft CLI](#deploy-with-gcloud-or-aft-cli)
 - [Stable Features](#stable-features)
@@ -60,6 +61,41 @@ flowchart LR
     Obs --> Azure
     Obs --> SaaS
     Obs --> VectorDB
+```
+
+### How Templates & Features Work
+
+Apigee Templates use a modular, composition-based model where self-contained **Features** are combined into complete, deployable **API Proxies**:
+
+- **Features (`features/*.yaml`, `features/draft/*.yaml`)**: Granular, reusable building blocks that encapsulate specific gateway capabilities (e.g., request pre-validation, protocol mediation, PII masking, token counting, or analytics logging). Each feature bundles its own policies, scripts, and execution rules.
+- **Templates (`templates/*.yaml`)**: Declarative definitions that assemble multiple features together, specify API base paths and route rules, configure dynamic parameters, and define upstream backend targets.
+- **Template Compiler (`aft` / `gcloud`)**: Resolves referenced features, merges policies and flow steps into an optimized execution pipeline, and packages the bundle into an Apigee API Proxy ready for instant deployment.
+
+```mermaid
+graph TD
+    subgraph Features ["Modular Features (features/*.yaml)"]
+        F1["ai-pre-validate.yaml<br/>• Request validation<br/>• Protocol translation<br/>• Model routing"]
+        F2["ai-completions.yaml<br/>• Target callouts<br/>• Response mediation"]
+        F3["ai-post-analytics.yaml<br/>• Token counting<br/>• Cost calculation<br/>• Analytics DataCapture"]
+    end
+
+    subgraph Template ["Template Definition (templates/*.yaml)"]
+        T["REST-AI-Completions.yaml<br/>• References: [F1, F2, F3]<br/>• BasePath: /v1/chat/completions<br/>• Targets: Google Vertex AI, OpenAI, Anthropic"]
+    end
+
+    subgraph Engine ["Apigee Feature Templater Engine"]
+        AFT["aft / gcloud compiler"]
+    end
+
+    subgraph Proxy ["Apigee API Proxy Bundle"]
+        P["Generated API Proxy<br/>• ProxyEndpoints (PreFlow/PostFlow)<br/>• Merged Policies & JavaScript Resources<br/>• Multi-Target Endpoints"]
+    end
+
+    F1 -->|Referenced by| T
+    F2 -->|Referenced by| T
+    F3 -->|Referenced by| T
+    T -->|Compiled by| AFT
+    AFT -->|Generates| P
 ```
 
 ---
@@ -124,7 +160,7 @@ Deploy using the `-o ORG:NAME:ENV:SERVICE_ACCOUNT` option syntax:
 aft templates/REST-AI-Completions.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
 
 # Or deploy an individual feature definition
-aft features/cloud-run-proxy.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
+aft features/ai-pre-validate.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
 ```
 
 ---
@@ -133,25 +169,26 @@ aft features/cloud-run-proxy.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVIC
 
 Stable features available for deployment.
 
-### AI, Vector Databases & Search
+### AI & API Management
 
 | Feature | Description | Dependencies | Used in Templates | Colab Notebook |
 |---|---|---|---|---|
-| **`ai-anthropic`** | Proxy for Anthropic Claude models with KVM credential management and header manipulation. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-anthropic.ipynb) |
-| **`ai-completions`** | Multi-provider Chat Completions API proxy supporting OpenAI, Google Cloud Vertex AI, and Anthropic targets with OpenAPI validation. | `ai-pre-validate`, `ai-post-analytics` | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Completions.ipynb) |
-| **`ai-key-quota`** | Developer app group verification, token-level LLM quota enforcement, analytics data capture, and unauthorized fault handling. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-key-quota.ipynb) |
-| **`ai-post-analytics`** | Base AI & LLM response handling with token counting, cost calculation, streaming EventFlow capture, and DataCapture collectors. | None (Standalone) | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-post-analytics.ipynb) |
-| **`ai-pre-validate`** | Request inspection, cross-format protocol conversion (OpenAI/Anthropic/Gemini), and intelligent model-to-target routing. | None (Standalone) | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-pre-validate.ipynb) |
-| **`oas-validation`** | In-flight OpenAPI 3.0/3.1/3.2+ request validation for paths, query parameters, headers, and JSON body payloads. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/oas-validation.ipynb) |
-| **`piimask-presidio`** | Sensitive data redaction and anonymization using Microsoft Presidio analyzer and anonymizer service callouts. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/piimask-presidio.ipynb) |
-| **`piimask-sdp`** | In-flight request and response PII inspection and de-identification using Google Cloud Sensitive Data Protection (DLP). | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/piimask-sdp.ipynb) |
+| **`ai-completions`** | Multi-provider Chat Completions API proxy supporting OpenAI, Google Cloud Vertex AI, and Anthropic targets with OpenAPI validation. | `ai-pre-validate`, `ai-post-analytics` | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml), [`REST-AI-GoogleCloud`](templates/REST-AI-GoogleCloud.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Completions.ipynb) |
+| **`ai-failover`** | Intercepts target failures in defaultFaultRule and executes failover routing to Google Cloud Vertex AI OpenAI endpoint. | None (Standalone) | [`REST-AI-GoogleCloud`](templates/REST-AI-GoogleCloud.yaml) | — |
+| **`ai-post-analytics`** | Base AI & LLM response handling with token counting, cost calculation, streaming EventFlow capture, and DataCapture collectors. | None (Standalone) | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml), [`REST-AI-GoogleCloud`](templates/REST-AI-GoogleCloud.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-post-analytics.ipynb) |
+| **`ai-pre-validate`** | Request inspection, cross-format protocol conversion (OpenAI/Anthropic/Gemini), and intelligent model-to-target routing. | None (Standalone) | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml), [`REST-AI-GoogleCloud`](templates/REST-AI-GoogleCloud.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-pre-validate.ipynb) |
+| **`ai-target-anthropic`** | Target endpoint proxy for Anthropic Claude models with KVM credential management and header injection. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-anthropic.ipynb) |
+| **`ai-target-googlecloud`** | Target endpoint proxy for Google Cloud Vertex AI Model Garden models (global endpoint). | None (Standalone) | — | — |
+| **`ai-target-googlecloudeu`** | Target endpoint proxy for Google Cloud Vertex AI Model Garden models (EU regional endpoint). | None (Standalone) | — | — |
+| **`auth-apikey-quota`** | Developer app group verification, token-level LLM quota enforcement, analytics data capture, and unauthorized fault handling. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-key-quota.ipynb) |
+| **`auth-apikey-validate`** | Developer app key validation, header extraction, and IAM token assignment for authorized access. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-key-quota.ipynb) |
 
 ---
 
 ## Draft Extension Features
 
 > [!NOTE]
-> All features below carry the `category: draft` tag to indicate that they are in active testing and integration validation. Each feature includes a dedicated Jupyter notebook in [`notebooks/`](notebooks/) that you can open and run directly in Google Colab.
+> All features below carry the `category: draft` tag and are located in `features/draft/` to indicate that they are in active testing and integration validation. Each feature includes a dedicated Jupyter notebook in [`notebooks/`](notebooks/) that you can open and run directly in Google Colab.
 
 ### 1. Google Cloud Services
 
@@ -274,6 +311,9 @@ Stable features available for deployment.
 | **`webhook-shopify-verifier`** | Validates `X-Shopify-Hmac-Sha256` signatures on Shopify store webhooks (orders/create, customers/update) with payload integrity checking. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/webhook-shopify-verifier.ipynb) |
 | **`cors-policy-customizer`** | Handles CORS preflight OPTIONS requests dynamically with multi-origin regex allowlists, custom allowed headers, and credentials forwarding. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/cors-policy-customizer.ipynb) |
 | **`pii-regex-redactor`** | High-performance in-flight JavaScript regex sanitizer redacting Social Security Numbers (SSN), Credit Cards, and emails from request/response bodies. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/pii-regex-redactor.ipynb) |
+| **`oas-validation`** | In-flight OpenAPI 3.0/3.1/3.2+ request validation for paths, query parameters, headers, and JSON body payloads. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/oas-validation.ipynb) |
+| **`piimask-presidio`** | Sensitive data redaction and anonymization using Microsoft Presidio analyzer and anonymizer service callouts. | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/piimask-presidio.ipynb) |
+| **`piimask-sdp`** | In-flight request and response PII inspection and de-identification using Google Cloud Sensitive Data Protection (DLP). | None (Standalone) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/piimask-sdp.ipynb) |
 
 ### 8. Transformation & Protocol Mediation
 
@@ -311,7 +351,8 @@ Stable features available for deployment.
 
 ## Repository Structure
 ```
-├── features/        # Modular Apigee Feature YAML definitions
+├── features/        # Modular Apigee Feature YAML definitions (stable)
+│   └── draft/       # Draft & experimental feature templates
 ├── templates/       # Multi-feature composite API proxy templates
 ├── notebooks/       # Google Colab runnable test & deployment notebooks
 ├── src/             # ES5 JavaScript utilities & schema validators
@@ -320,9 +361,29 @@ Stable features available for deployment.
 
 ---
 
+## Naming Conventions (draft)
+The following naming convention is in the process of being defined for **templates** and **features**.
+
+### Templates
+{PROTOCOL}-{Domain}-{Verb}.yaml
+
+Examples:
+* REST-AI-Completions.yaml
+* REST-AI-Embeddings.yaml
+* MCP-Customer-Service.yaml
+
+### Features
+{domain}-{topic}-{function}.yaml
+
+Examples:
+* ai-target-googlecloud.yaml
+* ai-target-completions.yaml
+* ai-quotas-enforce.yaml
+
+---
 ## Contributing
 1. Fork the repository.
-2. Add new feature YAMLs to `features/` with `category: draft`.
+2. Add new feature YAMLs to `features/draft/` with `category: draft`.
 3. Create a corresponding Jupyter Notebook in `notebooks/`.
 4. Run `npm test` to ensure all tests pass.
 5. Submit a Pull Request.

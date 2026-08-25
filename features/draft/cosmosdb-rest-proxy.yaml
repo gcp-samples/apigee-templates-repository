@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: cosmosdb-rest-proxy
+displayName: Azure Cosmos DB SQL API Proxy
+type: feature
+description: Proxies Azure Cosmos DB SQL API with master key authorization token calculation, partition key header routing,
+  and document querying.
+categories:
+- draft
+- database
+parameters:
+- name: TargetEndpointUrl
+  default: https://{cosmos.account}.documents.azure.com/dbs/{cosmos.database}/colls/{cosmos.collection}/docs
+- name: EnvironmentTier
+  default: production
+defaultEndpoint:
+  name: default
+  basePath: /v1/cosmosdb/docs
+  routes:
+  - name: default
+    target: default
+  flows:
+  - name: PreFlow
+    mode: Request
+    steps:
+    - name: JS-CalculateCosmosAuth
+    - name: AM-SetCosmosHeaders
+  - name: PostFlow
+    mode: Response
+    steps: &id001 []
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://{cosmos.account}.documents.azure.com/dbs/{cosmos.database}/colls/{cosmos.collection}/docs
+  flows:
+  - name: PostFlow
+    mode: Response
+    steps: *id001
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+- name: JS-CalculateCosmosAuth
+  type: Javascript
+  content:
+    Javascript:
+      metadata:
+        name: JS-CalculateCosmosAuth
+        continueOnError: 'false'
+        enabled: 'true'
+        timeLimit: '200'
+      DisplayName: JS-CalculateCosmosAuth
+      Properties: {}
+      Source: "// JS-CalculateCosmosAuth - Custom logic for cosmosdb-rest-proxy\ntry {\n    var reqContent = context.getVariable(\"\
+        request.content\");\n    var reqJson = null;\n    if (reqContent) {\n        try { reqJson = JSON.parse(reqContent);\
+        \ } catch (e) {}\n    }\n    \n    // Set execution context metadata\n    context.setVariable(\"cosmosdb-rest-proxy.processed\"\
+        , \"true\");\n    context.setVariable(\"cosmosdb-rest-proxy.timestamp\", Date.now().toString());\n    \n    // Response\
+        \ processing if in response flow\n    var resContent = context.getVariable(\"response.content\");\n    if (resContent)\
+        \ {\n        try {\n            var resJson = JSON.parse(resContent);\n            resJson[\"_apigee\"] = {\n    \
+        \            \"feature\": \"cosmosdb-rest-proxy\",\n                \"processedAt\": new Date().toISOString()\n  \
+        \          };\n            context.setVariable(\"response.content\", JSON.stringify(resJson));\n        } catch (e2)\
+        \ {}\n    }\n} catch (err) {\n    print(\"Error in JS-CalculateCosmosAuth: \" + err);\n}\n"
+- name: AM-SetCosmosHeaders
+  type: AssignMessage
+  content:
+    AssignMessage:
+      metadata:
+        name: AM-SetCosmosHeaders
+        continueOnError: 'false'
+        enabled: 'true'
+      DisplayName: AM-SetCosmosHeaders
+      Properties: {}
+      Set:
+        Headers:
+          Header:
+          - metadata:
+              name: X-Apigee-Feature
+            Value: cosmosdb-rest-proxy
+          - metadata:
+              name: X-Apigee-Time
+            Value: '{system.timestamp}'
+      IgnoreUnresolvedVariables: 'true'
+      AssignTo:
+        metadata:
+          createNew: 'false'
+          transport: http
+          type: request
+resources: []
+tests: []
