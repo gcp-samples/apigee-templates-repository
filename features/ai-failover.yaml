@@ -54,13 +54,13 @@ policies:
             Headers:
               Header:
                 - Name: Content-Type
-                  Value: application/json
+                  _text: application/json
             Payload:
               metadata:
                 contentType: application/json
-              Value: |
+              _text: |
                 {
-                  "model": "gemini-3.7-flash,
+                  "model": "google/gemini-3.7-flash",
                   "messages": [
                     {
                       "role": "user",
@@ -94,7 +94,7 @@ policies:
 
           if (failoverContent) {
             response.content = failoverContent;
-            var statusCode = failoverStatusCode ? parseInt(failoverStatusCode, 10) : 200;
+            var statusCode = failoverStatusCode ? failoverStatusCode : 200;
             context.setVariable("response.status.code", statusCode);
             context.setVariable("message.status.code", statusCode);
             context.setVariable("response.header.Content-Type", "application/json");

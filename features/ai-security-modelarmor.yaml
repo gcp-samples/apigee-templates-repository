@@ -1,0 +1,48 @@
+name: ai-security-modelarmor
+displayName: ai-security-modelarmor
+type: feature
+description: ai-security-modelarmor
+documentation: ""
+gateway: apigee
+schemaVersion: 1.0.0
+categories: []
+parameters: []
+defaultEndpoint:
+  name: default
+  basePath: /ai-security-modelarmor
+  routes:
+    - name: default
+      target: default
+  flows:
+    - name: PreFlow
+      mode: Request
+      steps:
+        - name: SUP-SanitizePrompt
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://aiplatform.googleapis.com
+  flows: []
+  faultRules: []
+  httpTargetConnection:
+    Properties: {}
+    URL: https://aiplatform.googleapis.com
+endpoints: []
+targets: []
+policies:
+  - name: SUP-SanitizePrompt
+    type: SanitizeUserPrompt
+    content:
+      SanitizeUserPrompt:
+        metadata:
+          async: "false"
+          continueOnError: "false"
+          enabled: "true"
+          name: SUP-SanitizePrompt
+        IgnoreUnresolvedVariables: "false"
+        DisplayName: SUP-SanitizePrompt
+        ModelArmor:
+          TemplateName: projects/{organization.name}/locations/{system.region.name}/templates/default-ma-template
+        UserPromptSource: "{ai.requestPrompt}"
+resources: []
+tests: []

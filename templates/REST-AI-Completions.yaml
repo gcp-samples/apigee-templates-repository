@@ -5,8 +5,9 @@ description: API template for REST-AI-Completions
 gateway: apigee
 schemaVersion: 1.0.0
 features:
-  - ../features/ai-pre-validate.yaml
   - ../features/ai-completions.yaml
+  - ../features/ai-pre-validate.yaml
+  - ../features/ai-failover.yaml
   - ../features/ai-post-analytics.yaml
 parameters:
   - name: ModelRouting

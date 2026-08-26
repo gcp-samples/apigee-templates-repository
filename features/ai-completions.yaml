@@ -35,7 +35,12 @@ endpoints:
 targets:
   - name: googlecloud-oai
     url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/endpoints/openapi/chat/completions
-    flows: []
+    flows:
+      - name: PreFlow
+        mode: Request
+        steps:
+        - name: AM-SetGoogleToken
+          condition: request.header.Authorization == null
     faultRules: []
     httpTargetConnection:
       Properties: {}
@@ -56,7 +61,12 @@ targets:
       URL: https://api.openai.com
   - name: googlecloud
     url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
-    flows: []
+    flows:
+      - name: PreFlow
+        mode: Request
+        steps:
+        - name: AM-SetGoogleToken
+          condition: request.header.Authorization == null
     faultRules: []
     httpTargetConnection:
       Properties: {}
@@ -75,6 +85,28 @@ policies:
         Options:
           ValidateMessageBody: "true"
         OASResource: oas://openapi.yaml
+  - name: AM-SetGoogleToken
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: AM-SetGoogleToken
+        DisplayName: AM-SetGoogleToken
+        Properties: {}
+        Set:
+          Authentication:
+            HeaderName: Authorization
+            GoogleAccessToken:
+              Scopes:
+                Scope: https://www.googleapis.com/auth/cloud-platform
+        IgnoreUnresolvedVariables: "true"
+        AssignTo:
+          metadata:
+            createNew: "false"
+            transport: http
+            type: request
 resources:
   - name: openapi.yaml
     type: oas

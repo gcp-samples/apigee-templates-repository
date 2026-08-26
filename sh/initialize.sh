@@ -1,3 +1,17 @@
+# Create Service Account
+gcloud iam service-accounts create "apigee-service" --project="$GOOGLE_CLOUD_PROJECT" \
+    --description="Service account for Apigee access." \
+    --display-name="Apigee Service"
+gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:apigee-service@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/run.invoker"
+gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:apigee-service@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/aiplatform.user"
+gcloud projects add-iam-policy-binding $GOOGLE_CLOUD_PROJECT \
+    --member="serviceAccount:apigee-service@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com" \
+    --role="roles/modelarmor.user"
+
 # KVM
 curl -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJECT/environments/$APIGEE_ENV/keyvaluemaps" -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" -H "Content-Type: application/json" -d '{
   "name": "AI-Config",
@@ -8,7 +22,7 @@ curl -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJE
   "value": "{\"models\": {\"google/\": \"googlecloud-oai\", \"anthropic/\": \"googlecloud\", \"openai/\": \"openai\"}, \"mappings\": {\"google/gemini-flash-latest\": \"google/gemini-3.6-flash\"}}"
 }'
 
-# data collectors
+# Data Collectors
 curl -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJECT/datacollectors" -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" -H 'Content-Type: application/json; charset=utf-8' \
 -d '{"name": "dc_ai_model", "description": "Model name", "type": "STRING"}'
 curl -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJECT/datacollectors" -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" -H 'Content-Type: application/json; charset=utf-8' \
@@ -34,7 +48,7 @@ curl -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJE
 curl -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJECT/datacollectors" -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" -H 'Content-Type: application/json; charset=utf-8' \
 -d '{"name": "dc_ai_user", "description": "AI user", "type": "STRING"}'
 
-# cost report
+# Cost Report
 curl -s -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJECT/reports" \
   -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
   -H "Content-Type: application/json; charset=utf-8" \
@@ -52,7 +66,7 @@ curl -s -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PR
   "dimensions": ["dc_ai_model", "developer_email"]
 }'
 
-# model latency report
+# Model Latency Report
 curl -s -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJECT/reports" \
   -H "Authorization: Bearer $(gcloud auth application-default print-access-token)" \
   -H "Content-Type: application/json; charset=utf-8" \
@@ -70,7 +84,7 @@ curl -s -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PR
   "dimensions": ["apiproxy", "dc_ai_model", "dc_ai_response_type"]
 }'
 
-# model tokens
+# Model Tokens Report
 curl -s -X POST "https://apigee.googleapis.com/v1/organizations/$GOOGLE_CLOUD_PROJECT/reports"   -H "Authorization: Bearer $(gcloud auth application-default print-access-token)"   -H "Content-Type: application/json; charset=utf-8"   -d '
 {
   "name": "ai_token_counts_by_model_user",
