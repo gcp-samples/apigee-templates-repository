@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+type: feature
+description: Target for OpenAI.
+parameters: []
+endpoints: []
+targets:
+  - name: openai
+    url: https://api.openai.com
+    flows:
+      - name: PreFlow
+        mode: Request
+        steps:
+          - name: KVM-LoadCredentials
+          - name: AM-SetHeader
+    faultRules: []
+policies:
+  - name: KVM-LoadCredentials
+    type: KeyValueMapOperations
+    content:
+      KeyValueMapOperations:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: KVM-LoadCredentials
+          mapIdentifier: AI-Secrets
+        DisplayName: KVM-LoadCredentials
+        Properties: {}
+        ExclusiveCache: "false"
+        ExpiryTimeInSecs: "10"
+        Get:
+          - metadata:
+              assignTo: ai.openAiKey
+            Key:
+              Parameter: OpenAI_Key
+        Scope: environment
+  - name: AM-SetHeader
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: AM-SetHeader
+        DisplayName: AM-SetHeader
+        Properties: {}
+        Set:
+          Headers:
+            Header:
+              metadata:
+                name: x-api-key
+              _text: "{ai.openAiKey}"
+        IgnoreUnresolvedVariables: "true"
+        AssignTo:
+          metadata:
+            createNew: "false"
+            transport: http
+            type: request
+resources: []
+tests: []

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+type: feature
+description: Proxy for Google Gemini models.
+defaultEndpoint:
+  name: default
+  routes:
+    - name: route-gemini
+      condition: target.route = "gemini"
+      target: gemini
+endpoints: []
+parameters: []
+targets:
+  - name: gemini
+    url: https://generativelanguage.googleapis.com/v1beta/interactions
+    flows: []
+policies: []
+resources: []
+tests: []

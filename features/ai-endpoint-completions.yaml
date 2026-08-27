@@ -11,66 +11,14 @@ parameters: []
 endpoints:
   - name: completions
     basePath: /v1/chat/completions
-    routes:
-      - name: route-googlecloud
-        condition: target.route = "googlecloud"
-        target: googlecloud
-      - name: route-googlecloud-oai
-        condition: target.route = "googlecloud-oai"
-        target: googlecloud-oai
-      - name: route-openai
-        condition: target.route = "openai"
-        target: openai
-      - name: route-anthropic
-        condition: target.route = "anthropic"
-        target: anthropic
-      - name: default
-        target: googlecloud
+    routes: []
     flows:
       - name: PreFlow
         mode: Request
         steps:
           - name: OAS-Validation
     faultRules: []
-targets:
-  - name: googlecloud-oai
-    url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/endpoints/openapi/chat/completions
-    flows:
-      - name: PreFlow
-        mode: Request
-        steps:
-        - name: AM-SetGoogleToken
-          condition: request.header.Authorization == null
-    faultRules: []
-    httpTargetConnection:
-      Properties: {}
-      URL: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/endpoints/openapi/chat/completions
-  - name: anthropic
-    url: https://api.anthropic.com
-    flows: []
-    faultRules: []
-    httpTargetConnection:
-      Properties: {}
-      URL: https://api.anthropic.com
-  - name: openai
-    url: https://api.openai.com
-    flows: []
-    faultRules: []
-    httpTargetConnection:
-      Properties: {}
-      URL: https://api.openai.com
-  - name: googlecloud
-    url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
-    flows:
-      - name: PreFlow
-        mode: Request
-        steps:
-        - name: AM-SetGoogleToken
-          condition: request.header.Authorization == null
-    faultRules: []
-    httpTargetConnection:
-      Properties: {}
-      URL: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
+targets: []
 policies:
   - name: OAS-Validation
     type: OASValidation
@@ -85,28 +33,6 @@ policies:
         Options:
           ValidateMessageBody: "true"
         OASResource: oas://openapi.yaml
-  - name: AM-SetGoogleToken
-    type: AssignMessage
-    content:
-      AssignMessage:
-        metadata:
-          continueOnError: "false"
-          enabled: "true"
-          name: AM-SetGoogleToken
-        DisplayName: AM-SetGoogleToken
-        Properties: {}
-        Set:
-          Authentication:
-            HeaderName: Authorization
-            GoogleAccessToken:
-              Scopes:
-                Scope: https://www.googleapis.com/auth/cloud-platform
-        IgnoreUnresolvedVariables: "true"
-        AssignTo:
-          metadata:
-            createNew: "false"
-            transport: http
-            type: request
 resources:
   - name: openapi.yaml
     type: oas

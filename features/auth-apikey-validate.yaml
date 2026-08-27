@@ -22,6 +22,7 @@ defaultEndpoint:
           condition: request.header.x-ai-key == null AND developerAppsResponse.content !=
             null
         - name: VA-VerifyKey
+          condition: token.type != "google"
         - name: AM-RemoveKey
   faultRules: []
   defaultFaultRule:

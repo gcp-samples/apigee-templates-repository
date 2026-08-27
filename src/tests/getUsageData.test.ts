@@ -52,6 +52,50 @@ describe("getUsageData", () => {
     expect(usage.usageFound).toBe(true);
   });
 
+  it("should extract token counts when only reasoning_tokens in completion_tokens_details is present", () => {
+    const resp = JSON.stringify({
+      choices: [
+        {
+          delta: {
+            content: "",
+            extra_content: {
+              google: {
+                thought_signature: "test-signature"
+              }
+            },
+            role: "assistant"
+          },
+          finish_reason: "length",
+          index: 0,
+          logprobs: null
+        }
+      ],
+      created: 1787823756,
+      id: "jAaQapm8BYeCz_IP663z8QE",
+      model: "google/gemini-3.7-flash",
+      object: "chat.completion.chunk",
+      system_fingerprint: "",
+      usage: {
+        completion_tokens_details: {
+          reasoning_tokens: 96
+        },
+        extra_properties: {
+          google: {
+            traffic_type: "ON_DEMAND"
+          }
+        },
+        prompt_tokens: 6,
+        total_tokens: 102
+      }
+    });
+    const usage = getUsageData(resp);
+    expect(usage.model).toBe("gemini-3.7-flash");
+    expect(usage.requestTokenCount).toBe(6);
+    expect(usage.responseTokenCount).toBe(96);
+    expect(usage.totalTokenCount).toBe(102);
+    expect(usage.usageFound).toBe(true);
+  });
+
   it("should safely ignore [DONE], ping, and streaming control frames", () => {
     expect(getUsageData("data: [DONE]").usageFound).toBe(false);
     expect(getUsageData("event: ping\ndata: {}").usageFound).toBe(false);

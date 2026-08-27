@@ -42,7 +42,7 @@ policies:
         IgnoreUnresolvedVariables: "false"
         DisplayName: SUP-SanitizePrompt
         ModelArmor:
-          TemplateName: projects/{organization.name}/locations/{system.region.name}/templates/default-ma-template
+          TemplateName: projects/{organization.name}/locations/eu/templates/default-ma-template
         UserPromptSource: "{ai.requestPrompt}"
 resources: []
 tests: []

@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+name: REST-AI-Interactions
+type: template
+description: API template for REST-AI-Interactions
+gateway: apigee
+schemaVersion: 1.0.0
+features:
+  - ../features/ai-endpoint-interactions.yaml
+  - ../features/ai-target-gemini.yaml
+  - ../features/ai-model-routing.yaml
+  - ../features/ai-model-analytics.yaml
+parameters:
+  - name: ModelRouting
+    default: "'google/*'=gemini"
+  - name: ModelMapping
+    default: "gemini-flash-latest=gemini-3.7-flash,gemini-2.5-flash=gemini-3.7-flash"
+endpoints:
+  - name: interactions
+    basePath: /v1beta/interactions
+    routes:
+      - name: default
+        target: gemini
+targets:
+  - name: gemini
+    url: https://generativelanguage.googleapis.com

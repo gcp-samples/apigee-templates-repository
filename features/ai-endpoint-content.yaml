@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+name: ai-content
+displayName: Gemini Content Generation Endpoint
+type: feature
+description: Feature for the Gemini Content Generation Endpoint
+documentation: ""
+gateway: apigee
+schemaVersion: 1.0.0
+categories: []
+parameters: []
+endpoints:
+  - name: content
+    basePath: /v1/projects
+    routes: []
+    flows: []
+    faultRules: []
+targets: []
+policies: []
+resources: []
+tests: []

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+name: ai-content
+displayName: Gemini Interactions Endpoint
+type: feature
+description: Feature for the Gemini Interactions Endpoint
+documentation: ""
+gateway: apigee
+schemaVersion: 1.0.0
+categories: []
+parameters: []
+endpoints:
+  - name: interactions
+    basePath: /v1beta/interactions
+    routes: []
+    flows: []
+    faultRules: []
+targets: []
+policies: []
+resources: []
+tests: []

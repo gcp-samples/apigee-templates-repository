@@ -3,17 +3,24 @@ gateway: apigee
 schemaVersion: 1.0.0
 type: feature
 description: Proxy for Google Cloud Model Garden models.
-endpoints:
-  - name: googlecloud
-    basePath: /v1/projects
-    routes:
-      - name: googlecloud
-        target: googlecloud
-    flows: []
-    faultRules: []
+defaultEndpoint:
+  name: default
+  routes:
+    - name: route-googlecloud
+      condition: target.route = "googlecloud"
+      target: googlecloud
+    - name: route-googlecloud-oai
+      condition: target.route = "googlecloud-oai"
+      target: googlecloud-oai
+    - name: route-googlecloud-projects
+      condition: target.route = "googlecloud-project"
+      target: googlecloud-projects
+    - name: default
+      target: googlecloud
+endpoints: []
 parameters: []
 targets:
-  - name: googlecloud
+  - name: googlecloud-projects
     url: https://aiplatform.googleapis.com/v1/projects
     flows:
       - name: PreFlow
@@ -21,7 +28,22 @@ targets:
         steps:
         - name: AM-SetGoogleToken
           condition: request.header.Authorization == null
-    faultRules: []
+  - name: googlecloud-oai
+    url: https://aiplatform.googleapis.com/v1/projects/{organization.name}/locations/global/endpoints/openapi/chat/completions
+    flows:
+      - name: PreFlow
+        mode: Request
+        steps:
+        - name: AM-SetGoogleToken
+          condition: request.header.Authorization == null
+  - name: googlecloud
+    url: https://aiplatform.googleapis.com/v1/projects/{organization.name}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
+    flows:
+      - name: PreFlow
+        mode: Request
+        steps:
+        - name: AM-SetGoogleToken
+          condition: request.header.Authorization == null
 policies:
   - name: AM-SetGoogleToken
     type: AssignMessage

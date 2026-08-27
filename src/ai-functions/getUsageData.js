@@ -116,6 +116,29 @@ function getUsageData(contentString) {
       usageData.responseTokenCount = contentData["usageMetadata"]["candidatesTokenCount"];
     }
 
+    // fallback for reasoning_tokens / thoughtsTokenCount if no other response tokens found
+    if (!usageData.responseTokenCount) {
+      if (
+        contentData["usage"] &&
+        contentData["usage"]["completion_tokens_details"] &&
+        contentData["usage"]["completion_tokens_details"]["reasoning_tokens"] !== undefined
+      ) {
+        usageData.responseTokenCount = contentData["usage"]["completion_tokens_details"]["reasoning_tokens"];
+      } else if (
+        contentData["message"] &&
+        contentData["message"]["usage"] &&
+        contentData["message"]["usage"]["completion_tokens_details"] &&
+        contentData["message"]["usage"]["completion_tokens_details"]["reasoning_tokens"] !== undefined
+      ) {
+        usageData.responseTokenCount = contentData["message"]["usage"]["completion_tokens_details"]["reasoning_tokens"];
+      } else if (
+        contentData["usageMetadata"] &&
+        contentData["usageMetadata"]["thoughtsTokenCount"] !== undefined
+      ) {
+        usageData.responseTokenCount = contentData["usageMetadata"]["thoughtsTokenCount"];
+      }
+    }
+
     if (usageData.requestTokenCount > 0 || usageData.responseTokenCount > 0) {
       usageData.usageFound = true;
     }
