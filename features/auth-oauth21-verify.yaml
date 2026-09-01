@@ -73,6 +73,14 @@ parameters:
     displayName: Resource Documentation URL
     description: Optional documentation URL for the protected resource metadata
     default: ""
+  - name: ALLOW_API_KEYS
+    displayName: Allow API Keys
+    description: Whether to accept Apigee API Keys (via 'x-api-key', 'apikey' header, or 'apikey' query parameter) in addition to OAuth Bearer tokens
+    default: "true"
+  - name: GOOGLE_TOKENINFO_URL
+    displayName: Google TokenInfo URL
+    description: Endpoint used to introspect Google ya29 access tokens
+    default: "oauth2.googleapis.com/tokeninfo"
 defaultEndpoint:
   name: default
   basePath: /mcp
@@ -88,6 +96,12 @@ defaultEndpoint:
         - name: JS-ExtractAndClassifyToken
         - name: RF-Unauthorized
           condition: (auth_missing = "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: VAK-VerifyApiKey
+          condition: (auth_type = "apikey") and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: LC-LookupGoogleToken
+          condition: (token_format = "google_token") and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: SC-VerifyGoogleToken
+          condition: (token_format = "google_token") and (google_token_cached = null) and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
         - name: OA-VerifyAccessToken
           condition: (token_format = "opaque") and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
         - name: JWT-VerifyAccessTokenHS256
@@ -96,6 +110,8 @@ defaultEndpoint:
           condition: (token_format = "jwt") and (jwt_mode = "jwks") and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
         - name: JS-ValidateClaimsAndScope
           condition: (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: PC-StoreGoogleToken
+          condition: (token_format = "google_token") and (google_token_cached = null) and (google_token_valid = "true") and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
         - name: RF-InvalidToken
           condition: (mcp_auth_valid = "false") and (mcp_error_type = "invalid_token") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
         - name: RF-InsufficientScope
@@ -181,6 +197,12 @@ policies:
           var resourceDoc = (context.getVariable("RESOURCE_DOCUMENTATION") || "").trim();
           context.setVariable("oauth_resource_doc", resourceDoc);
 
+          var allowApiKeys = (context.getVariable("ALLOW_API_KEYS") || "true").trim().toLowerCase();
+          context.setVariable("allow_api_keys", allowApiKeys);
+
+          var googleTokenInfoUrl = (context.getVariable("GOOGLE_TOKENINFO_URL") || "oauth2.googleapis.com/tokeninfo").trim().replace(/^https?:\/\//i, "");
+          context.setVariable("google_tokeninfo_host_path", googleTokenInfoUrl);
+
           var providersJson = (context.getVariable("PROVIDERS_JSON") || "[]").trim();
           context.setVariable("oauth_providers_json", providersJson);
 
@@ -219,94 +241,169 @@ policies:
           // Skip Bearer extraction for OPTIONS preflight or metadata discovery
           if (verb === "OPTIONS" || pathSuffix === "/.well-known/oauth-protected-resource") {
             context.setVariable("bearer_token", "");
+            context.setVariable("auth_type", "none");
             context.setVariable("auth_missing", "false");
             context.setVariable("token_format", "none");
             context.setVariable("jwt_mode", "none");
           } else {
-            var authHeader = context.getVariable("request.header.Authorization") || "";
-            var token = "";
+            var allowApiKeys = context.getVariable("allow_api_keys") === "true";
+            var apiKey = "";
 
-            if (authHeader.indexOf("Bearer ") === 0) {
-              token = authHeader.substring(7).trim();
-            } else if (context.getVariable("request.queryparam.access_token")) {
-              token = context.getVariable("request.queryparam.access_token").trim();
+            if (allowApiKeys) {
+              apiKey = (context.getVariable("request.header.x-api-key") ||
+                        context.getVariable("request.header.apikey") ||
+                        context.getVariable("request.queryparam.apikey") ||
+                        context.getVariable("request.queryparam.api_key") ||
+                        context.getVariable("request.queryparam.key") || "").trim();
             }
 
-            if (!token) {
+            if (apiKey) {
+              // Client authenticated using an Apigee API Key
+              context.setVariable("auth_type", "apikey");
+              context.setVariable("apigee_api_key", apiKey);
+              context.setVariable("auth_missing", "false");
               context.setVariable("bearer_token", "");
-              context.setVariable("auth_missing", "true");
               context.setVariable("token_format", "none");
               context.setVariable("jwt_mode", "none");
             } else {
-              context.setVariable("bearer_token", token);
-              context.setVariable("auth_missing", "false");
+              // Check Bearer Authorization Header or access_token Query Parameter
+              var authHeader = context.getVariable("request.header.Authorization") || "";
+              var token = "";
 
-              var parts = token.split(".");
-              if (parts.length === 3) {
-                // It is a JWT (header.payload.signature)
-                context.setVariable("token_format", "jwt");
+              if (authHeader.indexOf("Bearer ") === 0) {
+                token = authHeader.substring(7).trim();
+              } else if (context.getVariable("request.queryparam.access_token")) {
+                token = context.getVariable("request.queryparam.access_token").trim();
+              }
 
-                var header = decodeJwtSegment(parts[0]) || {};
-                var payload = decodeJwtSegment(parts[1]) || {};
-                var alg = (header.alg || "").toUpperCase();
-                var tokenIss = payload.iss || "";
+              if (!token) {
+                context.setVariable("bearer_token", "");
+                context.setVariable("auth_type", "none");
+                context.setVariable("auth_missing", "true");
+                context.setVariable("token_format", "none");
+                context.setVariable("jwt_mode", "none");
+              } else {
+                context.setVariable("bearer_token", token);
+                context.setVariable("auth_type", "bearer");
+                context.setVariable("auth_missing", "false");
 
-                // Match against multi-provider list if configured
-                var matchedProvider = null;
-                try {
-                  var pStr = context.getVariable("oauth_providers_json") || "[]";
-                  var providers = JSON.parse(pStr);
-                  if (Array.isArray(providers) && providers.length > 0) {
-                    for (var i = 0; i < providers.length; i++) {
-                      var p = providers[i];
-                      if (p && p.issuer) {
-                        var pIssClean = p.issuer.replace(/\/$/, "");
-                        var tIssClean = tokenIss.replace(/\/$/, "");
-                        if (pIssClean === tIssClean || tIssClean.indexOf(pIssClean) === 0) {
-                          matchedProvider = p;
-                          break;
+                if (token.indexOf("ya29.") === 0) {
+                  // Google OAuth2 Opaque Access Token
+                  context.setVariable("token_format", "google_token");
+                  context.setVariable("jwt_mode", "none");
+                } else {
+                  var parts = token.split(".");
+                  if (parts.length === 3) {
+                    // It is a JWT (header.payload.signature)
+                    context.setVariable("token_format", "jwt");
+
+                    var header = decodeJwtSegment(parts[0]) || {};
+                    var payload = decodeJwtSegment(parts[1]) || {};
+                    var alg = (header.alg || "").toUpperCase();
+                    var tokenIss = payload.iss || "";
+
+                    // Match against multi-provider list if configured
+                    var matchedProvider = null;
+                    try {
+                      var pStr = context.getVariable("oauth_providers_json") || "[]";
+                      var providers = JSON.parse(pStr);
+                      if (Array.isArray(providers) && providers.length > 0) {
+                        for (var i = 0; i < providers.length; i++) {
+                          var p = providers[i];
+                          if (p && p.issuer) {
+                            var pIssClean = p.issuer.replace(/\/$/, "");
+                            var tIssClean = tokenIss.replace(/\/$/, "");
+                            if (pIssClean === tIssClean || tIssClean.indexOf(pIssClean) === 0) {
+                              matchedProvider = p;
+                              break;
+                            }
+                          }
                         }
                       }
+                    } catch (ep) {}
+
+                    if (matchedProvider) {
+                      if (matchedProvider.jwks_uri) {
+                        context.setVariable("jwt_jwks_uri", matchedProvider.jwks_uri);
+                        context.setVariable("jwt_mode", "jwks");
+                      } else if (matchedProvider.signing_secret) {
+                        context.setVariable("private.jwt_signing_secret", matchedProvider.signing_secret);
+                        context.setVariable("jwt_mode", "symmetric");
+                      } else {
+                        context.setVariable("jwt_mode", (alg.indexOf("RS") === 0 || alg.indexOf("ES") === 0) ? "jwks" : "symmetric");
+                      }
+
+                      if (matchedProvider.issuer) {
+                        context.setVariable("expected_issuer", matchedProvider.issuer);
+                      }
+                      if (matchedProvider.audience) {
+                        context.setVariable("expected_audience", matchedProvider.audience);
+                      }
+                      if (matchedProvider.required_scopes) {
+                        context.setVariable("mcp_required_scopes", matchedProvider.required_scopes);
+                      }
+                    } else {
+                      // Fallback to default single-provider config
+                      var defaultJwks = context.getVariable("jwt_jwks_uri") || "";
+                      if (defaultJwks || alg.indexOf("RS") === 0 || alg.indexOf("ES") === 0 || alg.indexOf("PS") === 0) {
+                        context.setVariable("jwt_mode", "jwks");
+                      } else {
+                        context.setVariable("jwt_mode", "symmetric");
+                      }
                     }
-                  }
-                } catch (ep) {}
-
-                if (matchedProvider) {
-                  if (matchedProvider.jwks_uri) {
-                    context.setVariable("jwt_jwks_uri", matchedProvider.jwks_uri);
-                    context.setVariable("jwt_mode", "jwks");
-                  } else if (matchedProvider.signing_secret) {
-                    context.setVariable("private.jwt_signing_secret", matchedProvider.signing_secret);
-                    context.setVariable("jwt_mode", "symmetric");
                   } else {
-                    context.setVariable("jwt_mode", (alg.indexOf("RS") === 0 || alg.indexOf("ES") === 0) ? "jwks" : "symmetric");
-                  }
-
-                  if (matchedProvider.issuer) {
-                    context.setVariable("expected_issuer", matchedProvider.issuer);
-                  }
-                  if (matchedProvider.audience) {
-                    context.setVariable("expected_audience", matchedProvider.audience);
-                  }
-                  if (matchedProvider.required_scopes) {
-                    context.setVariable("mcp_required_scopes", matchedProvider.required_scopes);
-                  }
-                } else {
-                  // Fallback to default single-provider config
-                  var defaultJwks = context.getVariable("jwt_jwks_uri") || "";
-                  if (defaultJwks || alg.indexOf("RS") === 0 || alg.indexOf("ES") === 0 || alg.indexOf("PS") === 0) {
-                    context.setVariable("jwt_mode", "jwks");
-                  } else {
-                    context.setVariable("jwt_mode", "symmetric");
+                    // Opaque Apigee native OAuth token
+                    context.setVariable("token_format", "opaque");
+                    context.setVariable("jwt_mode", "none");
                   }
                 }
-              } else {
-                // Opaque Apigee native OAuth token
-                context.setVariable("token_format", "opaque");
-                context.setVariable("jwt_mode", "none");
               }
             }
           }
+
+  - name: VAK-VerifyApiKey
+    type: VerifyAPIKey
+    content:
+      VerifyAPIKey:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: VAK-VerifyApiKey
+        DisplayName: VAK-VerifyApiKey
+        APIKey:
+          metadata:
+            ref: apigee_api_key
+
+  - name: LC-LookupGoogleToken
+    type: LookupCache
+    content:
+      LookupCache:
+        metadata:
+          name: LC-LookupGoogleToken
+        DisplayName: LC-LookupGoogleToken
+        AssignTo: google_token_cached
+        CacheKey:
+          Prefix: Google-TokenInfo
+          KeyFragment:
+            metadata:
+              ref: bearer_token
+
+  - name: SC-VerifyGoogleToken
+    type: ServiceCallout
+    content:
+      ServiceCallout:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: SC-VerifyGoogleToken
+        DisplayName: SC-VerifyGoogleToken
+        Request:
+          metadata:
+            clearPayload: "true"
+          IgnoreUnresolvedVariables: "false"
+        Response: google_tokeninfo_response
+        HTTPTargetConnection:
+          URL: "https://{google_tokeninfo_host_path}?access_token={bearer_token}"
 
   - name: OA-VerifyAccessToken
     type: OAuthV2
@@ -365,6 +462,7 @@ policies:
         DisplayName: JS-ValidateClaimsAndScope
         Properties: {}
         Source: |
+          var authType = context.getVariable("auth_type");
           var tokenFormat = context.getVariable("token_format");
           var jwtMode = context.getVariable("jwt_mode");
 
@@ -379,7 +477,54 @@ policies:
           var errorType = "invalid_token";
           var errorDesc = "The access token provided is invalid or expired.";
 
-          if (tokenFormat === "opaque") {
+          if (authType === "apikey") {
+            var vakFailed = context.getVariable("VerifyAPIKey.VAK-VerifyApiKey.failed");
+            if (vakFailed !== "true" && vakFailed !== true) {
+              isValid = true;
+              user = context.getVariable("developer.email") || context.getVariable("developer.app.name") || "apigee-app-user";
+              clientId = context.getVariable("client_id") || context.getVariable("developer.app.name") || "";
+              email = context.getVariable("developer.email") || "";
+              name = context.getVariable("developer.app.name") || "";
+              tokenScope = context.getVariable("apiproduct.developer.quota.scope") || context.getVariable("mcp_required_scopes") || "mcp";
+            } else {
+              errorType = "invalid_token";
+              errorDesc = "Invalid or expired Apigee API key.";
+            }
+          } else if (tokenFormat === "google_token") {
+            var cachedJson = context.getVariable("google_token_cached");
+            var gData = null;
+
+            if (cachedJson) {
+              try {
+                gData = JSON.parse(cachedJson);
+              } catch (e1) {}
+            } else {
+              var respContent = context.getVariable("google_tokeninfo_response.content") || "";
+              if (respContent) {
+                try {
+                  gData = JSON.parse(respContent);
+                  if (gData && !gData.error && (parseInt(gData.expires_in || "0", 10) > 0 || gData.user_id || gData.email)) {
+                    context.setVariable("google_token_valid", "true");
+                    context.setVariable("google_token_data", JSON.stringify(gData));
+                  }
+                } catch (e2) {}
+              }
+            }
+
+            if (gData && !gData.error && (parseInt(gData.expires_in || "0", 10) > 0 || gData.user_id || gData.email)) {
+              isValid = true;
+              user = gData.email || gData.user_id || "google-user";
+              email = gData.email || "";
+              name = gData.email || "";
+              clientId = gData.issued_to || gData.audience || "";
+              tokenScope = gData.scope || "";
+              issuer = "https://accounts.google.com";
+              audience = gData.audience || gData.issued_to || "";
+            } else {
+              errorType = "invalid_token";
+              errorDesc = (gData && gData.error_description) ? gData.error_description : "Google access token is invalid or expired.";
+            }
+          } else if (tokenFormat === "opaque") {
             var oauthFailed = context.getVariable("oauthV2.OA-VerifyAccessToken.failed");
             if (oauthFailed !== "true" && oauthFailed !== true) {
               isValid = true;
@@ -466,6 +611,22 @@ policies:
             context.setVariable("mcp_error_type", errorType);
             context.setVariable("mcp_error_description", errorDesc);
           }
+
+  - name: PC-StoreGoogleToken
+    type: PopulateCache
+    content:
+      PopulateCache:
+        metadata:
+          name: PC-StoreGoogleToken
+        DisplayName: PC-StoreGoogleToken
+        CacheKey:
+          Prefix: Google-TokenInfo
+          KeyFragment:
+            metadata:
+              ref: bearer_token
+        ExpirySettings:
+          TimeoutInSec: "300"
+        Source: google_token_data
 
   - name: RF-Unauthorized
     type: RaiseFault
