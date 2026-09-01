@@ -1,0 +1,632 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: auth-oauth21-verify
+displayName: OAuth 2.1 Token Verification & Protected Resource
+type: feature
+description: Secures RESTful API and MCP server proxies using OAuth 2.1 Bearer token verification supporting Apigee native opaque tokens, symmetric HS256 JWTs, and asymmetric JWKS tokens from external IdPs (Entra ID, Okta, Auth0), with RFC 9728 Protected Resource Metadata, scope enforcement, and identity propagation.
+documentation: ""
+categories:
+  - security
+  - oauth2
+  - rest
+  - mcp
+parameters:
+  - name: AUTH_SERVER_URL
+    displayName: Authorization Server URL
+    description: Base URL of the OAuth 2.1 authorization server (e.g. https://api.example.com, https://login.microsoftonline.com/{tenant}/v2.0, https://{yourOktaDomain}/oauth2/default). If empty, dynamically derived from request scheme and host.
+    default: ""
+  - name: JWKS_URI
+    displayName: JWKS URI
+    description: |
+      Optional public JWKS URI for single external IdP asymmetric token verification (e.g. https://login.microsoftonline.com/common/discovery/v2.0/keys or https://{yourOktaDomain}/oauth2/default/v1/keys).
+      Note: If PROVIDERS_JSON is configured, it takes precedence over JWKS_URI.
+    default: ""
+  - name: PROVIDERS_JSON
+    displayName: Multi-Provider Configuration (JSON)
+    description: |
+      Optional JSON array of trusted OAuth/OIDC identity providers for multi-IdP support.
+      When configured, takes precedence over JWKS_URI and dynamically matches the incoming token's 'iss' claim to select the appropriate JWKS endpoint, expected issuer, and audience.
+      Note: Apigee native opaque tokens and local HS256 JWTs are automatically supported by default without needing an entry here.
+
+      Example configuration:
+      [
+        {
+          "name": "entra",
+          "issuer": "https://login.microsoftonline.com/{tenant-id}/v2.0",
+          "jwks_uri": "https://login.microsoftonline.com/common/discovery/v2.0/keys",
+          "audience": "api://mcp-server"
+        },
+        {
+          "name": "okta",
+          "issuer": "https://{yourOktaDomain}/oauth2/default",
+          "jwks_uri": "https://{yourOktaDomain}/oauth2/default/v1/keys",
+          "audience": "api://mcp-server"
+        }
+      ]
+    default: "[]"
+  - name: JWT_SIGNING_SECRET
+    displayName: JWT Signing Secret
+    description: Secret key used to verify HS256 JWT access tokens (used when JWKS is not configured or for symmetric tokens)
+    default: apigee-oauth21-default-secure-secret-key-32bytes-min
+  - name: EXPECTED_ISSUER
+    displayName: Expected Issuer
+    description: Optional expected issuer ('iss' claim) to validate against. If empty, issuer validation is bypassed.
+    default: ""
+  - name: EXPECTED_AUDIENCE
+    displayName: Expected Audience
+    description: Optional expected audience ('aud' claim) to validate against (e.g. api://mcp-server or client_id). If empty, audience validation is bypassed.
+    default: ""
+  - name: REQUIRED_SCOPES
+    displayName: Required Scopes
+    description: Space-separated list of scopes required to access this MCP server
+    default: mcp
+  - name: RESOURCE_URL
+    displayName: MCP Resource URL
+    description: Canonical URL of this MCP server resource. If empty, dynamically derived from request scheme, host, and proxy basePath.
+    default: ""
+  - name: PROPAGATE_IDENTITY_HEADERS
+    displayName: Propagate Identity Headers
+    description: Whether to inject X-Authenticated-User, X-Authenticated-Client-Id, and X-Authenticated-Scope headers to backend requests
+    default: "true"
+  - name: RESOURCE_DOCUMENTATION
+    displayName: Resource Documentation URL
+    description: Optional documentation URL for the protected resource metadata
+    default: ""
+defaultEndpoint:
+  name: default
+  basePath: /mcp
+  routes:
+    - name: default
+      target: default
+  flows:
+    - name: PreFlow
+      mode: Request
+      steps:
+        - name: CORS-SetCors
+        - name: JS-InitMcpEnv
+        - name: JS-ExtractAndClassifyToken
+        - name: RF-Unauthorized
+          condition: (auth_missing = "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: OA-VerifyAccessToken
+          condition: (token_format = "opaque") and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: JWT-VerifyAccessTokenHS256
+          condition: (token_format = "jwt") and (jwt_mode = "symmetric") and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: JWT-VerifyAccessTokenJWKS
+          condition: (token_format = "jwt") and (jwt_mode = "jwks") and (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: JS-ValidateClaimsAndScope
+          condition: (auth_missing != "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: RF-InvalidToken
+          condition: (mcp_auth_valid = "false") and (mcp_error_type = "invalid_token") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: RF-InsufficientScope
+          condition: (mcp_auth_valid = "false") and (mcp_error_type = "insufficient_scope") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+        - name: AM-PropagateIdentity
+          condition: (mcp_auth_valid = "true") and (propagate_headers = "true") and (request.verb != "OPTIONS") and not (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource")
+
+    - name: GET OAuth Protected Resource Metadata
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource") and (request.verb = "GET")
+      steps:
+        - name: JS-BuildProtectedResourceMetadata
+  faultRules: []
+defaultTarget:
+  name: default
+  url: https://mcp-customer-service-323709580283.europe-west1.run.app/mcp
+  flows: []
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+  - name: CORS-SetCors
+    type: CORS
+    content:
+      CORS:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: CORS-SetCors
+        DisplayName: CORS-SetCors
+        AllowOrigins: "{request.header.origin}"
+        AllowMethods: GET, PUT, POST, DELETE, OPTIONS
+        AllowHeaders: "*"
+        ExposeHeaders: "*"
+        MaxAge: "3628800"
+        AllowCredentials: "true"
+        GeneratePreflightResponse: "true"
+        IgnoreUnresolvedVariables: "true"
+
+  - name: JS-InitMcpEnv
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-InitMcpEnv
+        DisplayName: JS-InitMcpEnv
+        Properties: {}
+        Source: |
+          var paramAuthServer = (context.getVariable("AUTH_SERVER_URL") || "").trim();
+          var paramResource = (context.getVariable("RESOURCE_URL") || "").trim();
+          var scheme = context.getVariable("client.scheme") || "https";
+          var host = context.getVariable("request.header.host") || "localhost";
+          var basePath = context.getVariable("proxy.basepath") || "";
+
+          var computedResource = paramResource || (scheme + "://" + host + basePath);
+          var computedAuthServer = paramAuthServer || (scheme + "://" + host);
+
+          context.setVariable("oauth_resource_url", computedResource);
+          context.setVariable("oauth_auth_server_url", computedAuthServer);
+          context.setVariable("oauth_protected_resource_url", computedAuthServer + "/.well-known/oauth-protected-resource");
+
+          var paramJwks = (context.getVariable("JWKS_URI") || "").trim();
+          context.setVariable("jwt_jwks_uri", paramJwks);
+
+          var expectedIss = (context.getVariable("EXPECTED_ISSUER") || "").trim();
+          context.setVariable("expected_issuer", expectedIss);
+
+          var expectedAud = (context.getVariable("EXPECTED_AUDIENCE") || "").trim();
+          context.setVariable("expected_audience", expectedAud);
+
+          var requiredScopes = (context.getVariable("REQUIRED_SCOPES") || "mcp").trim();
+          context.setVariable("mcp_required_scopes", requiredScopes);
+
+          var jwtSecret = (context.getVariable("JWT_SIGNING_SECRET") || "apigee-oauth21-default-secure-secret-key-32bytes-min").trim();
+          context.setVariable("private.jwt_signing_secret", jwtSecret);
+
+          var propagateHeaders = (context.getVariable("PROPAGATE_IDENTITY_HEADERS") || "true").trim();
+          context.setVariable("propagate_headers", propagateHeaders);
+
+          var resourceDoc = (context.getVariable("RESOURCE_DOCUMENTATION") || "").trim();
+          context.setVariable("oauth_resource_doc", resourceDoc);
+
+          var providersJson = (context.getVariable("PROVIDERS_JSON") || "[]").trim();
+          context.setVariable("oauth_providers_json", providersJson);
+
+  - name: JS-ExtractAndClassifyToken
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ExtractAndClassifyToken
+        DisplayName: JS-ExtractAndClassifyToken
+        Properties: {}
+        Source: |
+          function decodeJwtSegment(segment) {
+            if (!segment) return null;
+            try {
+              var b64 = segment.replace(/-/g, "+").replace(/_/g, "/");
+              while (b64.length % 4) b64 += "=";
+              var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+              var str = String(b64).replace(/=+$/, "");
+              var decoded = "";
+              for (var bc = 0, bs, buffer, idx = 0; buffer = str.charAt(idx++); ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? decoded += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
+                buffer = chars.indexOf(buffer);
+              }
+              return JSON.parse(decoded);
+            } catch (e) {
+              return null;
+            }
+          }
+
+          var pathSuffix = context.getVariable("proxy.pathsuffix") || "";
+          var verb = context.getVariable("request.verb") || "";
+
+          // Skip Bearer extraction for OPTIONS preflight or metadata discovery
+          if (verb === "OPTIONS" || pathSuffix === "/.well-known/oauth-protected-resource") {
+            context.setVariable("bearer_token", "");
+            context.setVariable("auth_missing", "false");
+            context.setVariable("token_format", "none");
+            context.setVariable("jwt_mode", "none");
+          } else {
+            var authHeader = context.getVariable("request.header.Authorization") || "";
+            var token = "";
+
+            if (authHeader.indexOf("Bearer ") === 0) {
+              token = authHeader.substring(7).trim();
+            } else if (context.getVariable("request.queryparam.access_token")) {
+              token = context.getVariable("request.queryparam.access_token").trim();
+            }
+
+            if (!token) {
+              context.setVariable("bearer_token", "");
+              context.setVariable("auth_missing", "true");
+              context.setVariable("token_format", "none");
+              context.setVariable("jwt_mode", "none");
+            } else {
+              context.setVariable("bearer_token", token);
+              context.setVariable("auth_missing", "false");
+
+              var parts = token.split(".");
+              if (parts.length === 3) {
+                // It is a JWT (header.payload.signature)
+                context.setVariable("token_format", "jwt");
+
+                var header = decodeJwtSegment(parts[0]) || {};
+                var payload = decodeJwtSegment(parts[1]) || {};
+                var alg = (header.alg || "").toUpperCase();
+                var tokenIss = payload.iss || "";
+
+                // Match against multi-provider list if configured
+                var matchedProvider = null;
+                try {
+                  var pStr = context.getVariable("oauth_providers_json") || "[]";
+                  var providers = JSON.parse(pStr);
+                  if (Array.isArray(providers) && providers.length > 0) {
+                    for (var i = 0; i < providers.length; i++) {
+                      var p = providers[i];
+                      if (p && p.issuer) {
+                        var pIssClean = p.issuer.replace(/\/$/, "");
+                        var tIssClean = tokenIss.replace(/\/$/, "");
+                        if (pIssClean === tIssClean || tIssClean.indexOf(pIssClean) === 0) {
+                          matchedProvider = p;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                } catch (ep) {}
+
+                if (matchedProvider) {
+                  if (matchedProvider.jwks_uri) {
+                    context.setVariable("jwt_jwks_uri", matchedProvider.jwks_uri);
+                    context.setVariable("jwt_mode", "jwks");
+                  } else if (matchedProvider.signing_secret) {
+                    context.setVariable("private.jwt_signing_secret", matchedProvider.signing_secret);
+                    context.setVariable("jwt_mode", "symmetric");
+                  } else {
+                    context.setVariable("jwt_mode", (alg.indexOf("RS") === 0 || alg.indexOf("ES") === 0) ? "jwks" : "symmetric");
+                  }
+
+                  if (matchedProvider.issuer) {
+                    context.setVariable("expected_issuer", matchedProvider.issuer);
+                  }
+                  if (matchedProvider.audience) {
+                    context.setVariable("expected_audience", matchedProvider.audience);
+                  }
+                  if (matchedProvider.required_scopes) {
+                    context.setVariable("mcp_required_scopes", matchedProvider.required_scopes);
+                  }
+                } else {
+                  // Fallback to default single-provider config
+                  var defaultJwks = context.getVariable("jwt_jwks_uri") || "";
+                  if (defaultJwks || alg.indexOf("RS") === 0 || alg.indexOf("ES") === 0 || alg.indexOf("PS") === 0) {
+                    context.setVariable("jwt_mode", "jwks");
+                  } else {
+                    context.setVariable("jwt_mode", "symmetric");
+                  }
+                }
+              } else {
+                // Opaque Apigee native OAuth token
+                context.setVariable("token_format", "opaque");
+                context.setVariable("jwt_mode", "none");
+              }
+            }
+          }
+
+  - name: OA-VerifyAccessToken
+    type: OAuthV2
+    content:
+      OAuthV2:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: OA-VerifyAccessToken
+        DisplayName: OA-VerifyAccessToken
+        Operation: VerifyAccessToken
+
+  - name: JWT-VerifyAccessTokenHS256
+    type: VerifyJWT
+    content:
+      VerifyJWT:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: JWT-VerifyAccessTokenHS256
+        DisplayName: JWT-VerifyAccessTokenHS256
+        Algorithm: HS256
+        IgnoreUnresolvedVariables: "true"
+        SecretKey:
+          Value:
+            metadata:
+              ref: private.jwt_signing_secret
+        Source: bearer_token
+
+  - name: JWT-VerifyAccessTokenJWKS
+    type: VerifyJWT
+    content:
+      VerifyJWT:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: JWT-VerifyAccessTokenJWKS
+        DisplayName: JWT-VerifyAccessTokenJWKS
+        Algorithm: RS256
+        IgnoreUnresolvedVariables: "true"
+        PublicKey:
+          JWKS:
+            metadata:
+              ref: jwt_jwks_uri
+        Source: bearer_token
+
+  - name: JS-ValidateClaimsAndScope
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ValidateClaimsAndScope
+        DisplayName: JS-ValidateClaimsAndScope
+        Properties: {}
+        Source: |
+          var tokenFormat = context.getVariable("token_format");
+          var jwtMode = context.getVariable("jwt_mode");
+
+          var isValid = false;
+          var user = "";
+          var clientId = "";
+          var tokenScope = "";
+          var email = "";
+          var name = "";
+          var issuer = "";
+          var audience = "";
+          var errorType = "invalid_token";
+          var errorDesc = "The access token provided is invalid or expired.";
+
+          if (tokenFormat === "opaque") {
+            var oauthFailed = context.getVariable("oauthV2.OA-VerifyAccessToken.failed");
+            if (oauthFailed !== "true" && oauthFailed !== true) {
+              isValid = true;
+              user = context.getVariable("developer.email") || context.getVariable("apigee.developer.email") || context.getVariable("client_id") || "apigee-client";
+              clientId = context.getVariable("client_id") || context.getVariable("apigee.client_id") || context.getVariable("developer.app.name") || "";
+              tokenScope = context.getVariable("scope") || context.getVariable("accesstoken.scope") || "";
+              email = context.getVariable("developer.email") || "";
+              name = context.getVariable("developer.app.name") || "";
+            }
+          } else if (tokenFormat === "jwt") {
+            var jwtPrefix = (jwtMode === "jwks") ? "jwt.JWT-VerifyAccessTokenJWKS" : "jwt.JWT-VerifyAccessTokenHS256";
+            var jwtValid = context.getVariable(jwtPrefix + ".valid");
+
+            if (jwtValid === "true" || jwtValid === true) {
+              isValid = true;
+
+              // Extract standard & IdP-specific claims (Entra ID, Okta, Auth0, Google, etc.)
+              user = context.getVariable(jwtPrefix + ".claim.subject") || context.getVariable(jwtPrefix + ".claim.sub") || "";
+              email = context.getVariable(jwtPrefix + ".claim.email") || context.getVariable(jwtPrefix + ".claim.upn") || context.getVariable(jwtPrefix + ".claim.preferred_username") || "";
+              name = context.getVariable(jwtPrefix + ".claim.name") || "";
+              clientId = context.getVariable(jwtPrefix + ".claim.client_id") || context.getVariable(jwtPrefix + ".claim.azp") || context.getVariable(jwtPrefix + ".claim.appid") || context.getVariable(jwtPrefix + ".claim.cid") || "";
+              tokenScope = context.getVariable(jwtPrefix + ".claim.scope") || context.getVariable(jwtPrefix + ".claim.scp") || "";
+              issuer = context.getVariable(jwtPrefix + ".claim.issuer") || context.getVariable(jwtPrefix + ".claim.iss") || "";
+              audience = context.getVariable(jwtPrefix + ".claim.audience") || context.getVariable(jwtPrefix + ".claim.aud") || "";
+
+              // If scope was an array serialized as JSON, normalize to space-separated string
+              if (tokenScope && tokenScope.indexOf("[") === 0) {
+                try {
+                  var arr = JSON.parse(tokenScope);
+                  if (Array.isArray(arr)) tokenScope = arr.join(" ");
+                } catch (e) {}
+              }
+
+              // Optional Expected Issuer Check
+              var expectedIssuer = (context.getVariable("expected_issuer") || "").trim();
+              if (expectedIssuer && issuer && issuer !== expectedIssuer) {
+                isValid = false;
+                errorDesc = "Token issuer '" + issuer + "' does not match expected issuer '" + expectedIssuer + "'.";
+              }
+
+              // Optional Expected Audience Check
+              var expectedAudience = (context.getVariable("expected_audience") || "").trim();
+              if (expectedAudience && audience) {
+                var audList = audience.split(/[\s,]+/);
+                if (audList.indexOf(expectedAudience) === -1 && audience !== expectedAudience) {
+                  isValid = false;
+                  errorDesc = "Token audience does not include expected audience '" + expectedAudience + "'.";
+                }
+              }
+            }
+          }
+
+          if (isValid) {
+            // Check required scopes
+            var requiredScopesStr = context.getVariable("mcp_required_scopes") || "mcp";
+            var requiredScopes = requiredScopesStr.split(/\s+/).filter(Boolean);
+            var tokenScopes = tokenScope.split(/\s+/).filter(Boolean);
+
+            var hasAllScopes = true;
+            for (var i = 0; i < requiredScopes.length; i++) {
+              if (tokenScopes.indexOf(requiredScopes[i]) === -1) {
+                hasAllScopes = false;
+                break;
+              }
+            }
+
+            if (!hasAllScopes && requiredScopes.length > 0) {
+              context.setVariable("mcp_auth_valid", "false");
+              context.setVariable("mcp_error_type", "insufficient_scope");
+              context.setVariable("mcp_error_description", "Access token lacks required scope(s): " + requiredScopesStr);
+            } else {
+              context.setVariable("mcp_auth_valid", "true");
+              context.setVariable("mcp_error_type", "");
+              context.setVariable("mcp_error_description", "");
+
+              context.setVariable("mcp_user", user || email || clientId || "anonymous-mcp-user");
+              context.setVariable("mcp_client_id", clientId);
+              context.setVariable("mcp_scope", tokenScope);
+              context.setVariable("mcp_email", email);
+              context.setVariable("mcp_name", name);
+            }
+          } else {
+            context.setVariable("mcp_auth_valid", "false");
+            context.setVariable("mcp_error_type", errorType);
+            context.setVariable("mcp_error_description", errorDesc);
+          }
+
+  - name: RF-Unauthorized
+    type: RaiseFault
+    content:
+      RaiseFault:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: RF-Unauthorized
+        DisplayName: RF-Unauthorized
+        Properties: {}
+        FaultResponse:
+          Set:
+            Headers:
+              Header:
+                - metadata:
+                    name: WWW-Authenticate
+                  Value: 'Bearer realm="mcp", resource_metadata="{oauth_protected_resource_url}", scope="{mcp_required_scopes}"'
+                - metadata:
+                    name: Content-Type
+                  Value: application/json
+            Payload:
+              contentType: application/json
+              Value: |
+                {
+                  "error": "unauthorized",
+                  "error_description": "Authentication required. Please obtain a Bearer token from the authorization server."
+                }
+            StatusCode: "401"
+            ReasonPhrase: Unauthorized
+        IgnoreUnresolvedVariables: "true"
+
+  - name: RF-InvalidToken
+    type: RaiseFault
+    content:
+      RaiseFault:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: RF-InvalidToken
+        DisplayName: RF-InvalidToken
+        Properties: {}
+        FaultResponse:
+          Set:
+            Headers:
+              Header:
+                - metadata:
+                    name: WWW-Authenticate
+                  Value: 'Bearer error="invalid_token", resource_metadata="{oauth_protected_resource_url}", error_description="{mcp_error_description}"'
+                - metadata:
+                    name: Content-Type
+                  Value: application/json
+            Payload:
+              contentType: application/json
+              Value: |
+                {
+                  "error": "invalid_token",
+                  "error_description": "{mcp_error_description}"
+                }
+            StatusCode: "401"
+            ReasonPhrase: Unauthorized
+        IgnoreUnresolvedVariables: "true"
+
+  - name: RF-InsufficientScope
+    type: RaiseFault
+    content:
+      RaiseFault:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: RF-InsufficientScope
+        DisplayName: RF-InsufficientScope
+        Properties: {}
+        FaultResponse:
+          Set:
+            Headers:
+              Header:
+                - metadata:
+                    name: WWW-Authenticate
+                  Value: 'Bearer error="insufficient_scope", scope="{mcp_required_scopes}", error_description="{mcp_error_description}"'
+                - metadata:
+                    name: Content-Type
+                  Value: application/json
+            Payload:
+              contentType: application/json
+              Value: |
+                {
+                  "error": "insufficient_scope",
+                  "error_description": "{mcp_error_description}"
+                }
+            StatusCode: "403"
+            ReasonPhrase: Forbidden
+        IgnoreUnresolvedVariables: "true"
+
+  - name: AM-PropagateIdentity
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-PropagateIdentity
+        DisplayName: AM-PropagateIdentity
+        Properties: {}
+        Set:
+          Headers:
+            Header:
+              - metadata:
+                  name: X-Authenticated-User
+                _text: "{mcp_user}"
+              - metadata:
+                  name: X-Authenticated-Client-Id
+                _text: "{mcp_client_id}"
+              - metadata:
+                  name: X-Authenticated-Scope
+                _text: "{mcp_scope}"
+        IgnoreUnresolvedVariables: "true"
+
+  - name: JS-BuildProtectedResourceMetadata
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-BuildProtectedResourceMetadata
+        DisplayName: JS-BuildProtectedResourceMetadata
+        Properties: {}
+        Source: |
+          var authServerUrl = context.getVariable("oauth_auth_server_url");
+          var resourceUrl = context.getVariable("oauth_resource_url");
+          var scopesStr = context.getVariable("mcp_required_scopes") || "mcp";
+          var scopes = scopesStr.split(/\s+/).filter(Boolean);
+          var resourceDoc = context.getVariable("oauth_resource_doc") || (resourceUrl + "/docs");
+
+          var authServers = [];
+          if (authServerUrl) {
+            authServers.push(authServerUrl);
+          }
+
+          try {
+            var pStr = context.getVariable("oauth_providers_json") || "[]";
+            var providers = JSON.parse(pStr);
+            if (Array.isArray(providers)) {
+              for (var i = 0; i < providers.length; i++) {
+                if (providers[i] && providers[i].issuer && authServers.indexOf(providers[i].issuer) === -1) {
+                  authServers.push(providers[i].issuer);
+                }
+              }
+            }
+          } catch (e) {}
+
+          var metadata = {
+            "resource": resourceUrl,
+            "authorization_servers": authServers,
+            "scopes_supported": scopes,
+            "bearer_methods_supported": ["header"],
+            "resource_documentation": resourceDoc
+          };
+
+          context.setVariable("response.content", JSON.stringify(metadata, null, 2));
+          context.setVariable("response.header.Content-Type", "application/json");
+          context.setVariable("response.status.code", 200);
+resources: []
+tests: []

@@ -1,0 +1,1970 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/apigee/apigee-templater/main/schema/gateway.schema.1.0.json
+gateway: apigee
+schemaVersion: 1.0.0
+name: auth-oauth21-server
+displayName: OAuth 2.1 Authorization Server
+type: feature
+description: Complete OAuth 2.1 Authorization Server supporting RESTful and MCP clients, Dynamic Client Registration (DCR - RFC 7591), Client ID Metadata Documents (CIMD), PKCE (RFC 7636), and Apigee X developer/app IDP integration.
+documentation: ""
+categories:
+  - security
+  - oauth2
+  - mcp
+parameters:
+  - name: ISSUER_URL
+    displayName: Issuer URL
+    description: Base URL of the OAuth authorization server (e.g. https://api.example.com). If empty, dynamically derived from request scheme and host.
+    default: ""
+  - name: APIGEE_API_HOST
+    displayName: Apigee API Base URL
+    description: Base host for Apigee X Management API ServiceCallouts
+    default: apigee.googleapis.com/v1
+  - name: DEFAULT_DEVELOPER_EMAIL
+    displayName: Default Developer Email
+    description: Developer email in Apigee X used for Dynamic Client Registration (DCR) apps
+    default: mcp-clients@apigee.internal
+  - name: DEFAULT_API_PRODUCT
+    displayName: Default API Product
+    description: API Product to associate with newly registered DCR client apps (optional)
+    default: ""
+  - name: JWT_SIGNING_SECRET
+    displayName: JWT Signing Secret
+    description: Secret key used to sign HS256 JWT tokens
+    default: apigee-oauth21-default-secure-secret-key-32bytes-min
+  - name: ACCESS_TOKEN_FORMAT
+    displayName: Access Token Format
+    description: Format of issued access tokens ('jwt', 'opaque', or 'auto'). 'auto' uses JWT for CIMD URL clients and opaque for registered Apigee Apps.
+    default: jwt
+  - name: SUPPORTED_SCOPES
+    displayName: Supported Scopes
+    description: Space-separated list of OAuth scopes supported by this server
+    default: mcp openid profile email read write
+defaultEndpoint:
+  name: default
+  basePath: /
+  routes:
+    - name: default
+  flows:
+    - name: PreFlow
+      mode: Request
+      steps:
+        - name: CORS-SetCors
+        - name: JS-InitOAuthEnv
+
+    - name: GET OAuth Protected Resource Metadata
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource") and (request.verb = "GET")
+      steps:
+        - name: JS-BuildProtectedResourceMetadata
+
+    - name: GET OAuth Authorization Server Metadata
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/.well-known/oauth-authorization-server") and (request.verb = "GET")
+      steps:
+        - name: JS-BuildAuthServerMetadata
+
+    - name: GET OpenID Configuration
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/.well-known/openid-configuration") and (request.verb = "GET")
+      steps:
+        - name: JS-BuildOidcConfig
+
+    - name: GET JWKS
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/jwks.json") and (request.verb = "GET")
+      steps:
+        - name: JS-BuildJwksResponse
+
+    - name: POST Dynamic Client Registration
+      mode: Response
+      condition: ((proxy.pathsuffix MatchesPath "/register") or (proxy.pathsuffix MatchesPath "/register-client")) and (request.verb = "POST")
+      steps:
+        - name: JS-ProcessDCRRequest
+        - name: SC-CreateDeveloper
+          condition: dcr_create_developer = "true"
+        - name: SC-CreateApp
+          condition: dcr_create_app = "true"
+        - name: JS-ProcessDCRResponse
+        - name: PC-StoreClient
+          condition: dcr_success = "true"
+        - name: AM-RegisterSuccess
+          condition: dcr_success = "true"
+        - name: AM-RegisterFailure
+          condition: dcr_success = "false"
+
+    - name: GET Authorize
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/authorize") and (request.verb = "GET")
+      steps:
+        - name: JS-ExtractAuthorizeParams
+        - name: LC-LookupCIMD
+          condition: is_cimd = "true"
+        - name: SC-FetchCIMD
+          condition: (is_cimd = "true") and (cimd_doc_cached = null)
+        - name: LC-LookupClient
+          condition: is_cimd = "false"
+        - name: SC-GetApigeeApp
+          condition: (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
+        - name: JS-ValidateAuthorize
+        - name: AM-AuthorizeForm
+
+    - name: POST Authorize / Consent
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/authorize") and (request.verb = "POST")
+      steps:
+        - name: JS-ExtractAuthorizeParams
+        - name: LC-LookupCIMD
+          condition: is_cimd = "true"
+        - name: SC-FetchCIMD
+          condition: (is_cimd = "true") and (cimd_doc_cached = null)
+        - name: LC-LookupClient
+          condition: is_cimd = "false"
+        - name: SC-GetApigeeApp
+          condition: (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
+        - name: JS-ValidateAuthorize
+        - name: JS-AuthenticateAndIssueCode
+          condition: authorize_valid = "true"
+        - name: PC-StoreCode
+          condition: (authorize_valid = "true") and (auth_success = "true")
+        - name: AM-AuthorizeRedirect
+          condition: (authorize_valid = "true") and (auth_success = "true")
+        - name: AM-AuthorizeErrorResponse
+          condition: (authorize_valid = "false") or (auth_success = "false")
+
+    - name: POST Token
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/token") and (request.verb = "POST")
+      steps:
+        - name: JS-ExtractTokenParams
+        - name: LC-LookupCode
+          condition: token_grant_type = "authorization_code"
+        - name: LC-LookupRefreshToken
+          condition: token_grant_type = "refresh_token"
+        - name: LC-LookupCIMD
+          condition: (token_grant_type = "client_credentials") and (is_cimd = "true")
+        - name: SC-FetchCIMD
+          condition: (token_grant_type = "client_credentials") and (is_cimd = "true") and (cimd_doc_cached = null)
+        - name: LC-LookupClient
+          condition: (token_grant_type = "client_credentials") and (is_cimd = "false")
+        - name: SC-GetApigeeApp
+          condition: (token_grant_type = "client_credentials") and (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
+        - name: JS-VerifyTokenRequest
+        - name: IC-InvalidateCode
+          condition: (token_grant_type = "authorization_code") and (token_generation_allowed = "true")
+        - name: IC-InvalidateRefreshToken
+          condition: (token_grant_type = "refresh_token") and (token_generation_allowed = "true")
+        - name: JWT-GenerateAccessToken
+          condition: (token_generation_allowed = "true") and (token_format_to_issue = "jwt")
+        - name: JWT-GenerateIDToken
+          condition: (token_generation_allowed = "true") and (token_scope_has_openid = "true")
+        - name: JS-FinalizeTokenResponse
+          condition: token_generation_allowed = "true"
+        - name: PC-StoreOpaqueAccessToken
+          condition: (token_generation_allowed = "true") and (token_format_to_issue = "opaque")
+        - name: PC-StoreRefreshToken
+          condition: token_generation_allowed = "true"
+        - name: AM-TokenResponse
+          condition: token_generation_allowed = "true"
+        - name: AM-TokenErrorResponse
+          condition: (token_generation_allowed = "false") or (token_error != null)
+
+    - name: POST Introspect
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/introspect") and (request.verb = "POST")
+      steps:
+        - name: JS-ExtractIntrospectParams
+        - name: LC-LookupOpaqueIntrospectToken
+          condition: (introspect_token != null) and (introspect_token_format = "opaque")
+        - name: JWT-VerifyIntrospectToken
+          condition: (introspect_token != null) and (introspect_token_format = "jwt")
+        - name: JS-FormatIntrospectResponse
+
+    - name: GET or POST UserInfo
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/userinfo") and ((request.verb = "GET") or (request.verb = "POST"))
+      steps:
+        - name: JS-ExtractBearerToken
+        - name: LC-LookupOpaqueUserInfoToken
+          condition: (bearer_token != null) and (userinfo_token_format = "opaque")
+        - name: JWT-VerifyUserInfoToken
+          condition: (bearer_token != null) and (userinfo_token_format = "jwt")
+        - name: JS-FormatUserInfoResponse
+          condition: bearer_token != null
+        - name: AM-UserInfoResponse
+          condition: userinfo_valid = "true"
+        - name: AM-UserInfoErrorResponse
+          condition: userinfo_valid = "false"
+
+    - name: POST Revoke
+      mode: Response
+      condition: (proxy.pathsuffix MatchesPath "/revoke") and (request.verb = "POST")
+      steps:
+        - name: JS-ProcessRevocation
+        - name: IC-InvalidateRevokedOpaqueAccessToken
+          condition: revoke_token_type = "access_token"
+        - name: IC-InvalidateRevokedRefreshToken
+          condition: revoke_token_type = "refresh_token"
+        - name: IC-InvalidateRevokedCode
+          condition: revoke_token_type = "code"
+        - name: AM-RevokeSuccess
+  faultRules: []
+endpoints: []
+targets: []
+policies:
+  - name: CORS-SetCors
+    type: CORS
+    content:
+      CORS:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: CORS-SetCors
+        DisplayName: CORS-SetCors
+        AllowOrigins: "{request.header.origin}"
+        AllowMethods: GET, PUT, POST, DELETE, OPTIONS
+        AllowHeaders: "*"
+        ExposeHeaders: "*"
+        MaxAge: "3628800"
+        AllowCredentials: "true"
+        GeneratePreflightResponse: "true"
+        IgnoreUnresolvedVariables: "true"
+
+  - name: JS-InitOAuthEnv
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-InitOAuthEnv
+        DisplayName: JS-InitOAuthEnv
+        Properties: {}
+        Source: |
+          var paramIssuer = (context.getVariable("ISSUER_URL") || "").trim();
+          var scheme = context.getVariable("client.scheme") || "https";
+          var host = context.getVariable("request.header.host") || "localhost";
+          var computedIssuer = paramIssuer || (scheme + "://" + host);
+
+          context.setVariable("oauth_issuer_url", computedIssuer);
+
+          var apiHost = (context.getVariable("APIGEE_API_HOST") || "apigee.googleapis.com/v1").trim();
+          apiHost = apiHost.replace(/^https?:\/\//i, "");
+          context.setVariable("apigee_api_host", apiHost);
+
+          var devEmail = (context.getVariable("DEFAULT_DEVELOPER_EMAIL") || "mcp-clients@apigee.internal").trim();
+          context.setVariable("default_dev_email", devEmail);
+
+          var apiProduct = (context.getVariable("DEFAULT_API_PRODUCT") || "").trim();
+          context.setVariable("default_api_product", apiProduct);
+
+          var jwtSecret = (context.getVariable("JWT_SIGNING_SECRET") || "apigee-oauth21-default-secure-secret-key-32bytes-min").trim();
+          context.setVariable("private.jwt_signing_secret", jwtSecret);
+
+          var tokenFormatParam = (context.getVariable("ACCESS_TOKEN_FORMAT") || "jwt").trim().toLowerCase();
+          if (tokenFormatParam !== "opaque" && tokenFormatParam !== "auto") {
+            tokenFormatParam = "jwt";
+          }
+          context.setVariable("oauth_token_format_pref", tokenFormatParam);
+
+          var supportedScopes = (context.getVariable("SUPPORTED_SCOPES") || "mcp openid profile email read write").trim();
+          context.setVariable("supported_scopes", supportedScopes);
+
+  - name: JS-BuildProtectedResourceMetadata
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-BuildProtectedResourceMetadata
+        DisplayName: JS-BuildProtectedResourceMetadata
+        Properties: {}
+        Source: |
+          var issuer = context.getVariable("oauth_issuer_url");
+          var scopesStr = context.getVariable("supported_scopes") || "mcp openid profile email read write";
+          var scopes = scopesStr.split(/\s+/).filter(Boolean);
+
+          var metadata = {
+            "resource": issuer + "/mcp",
+            "authorization_servers": [issuer],
+            "scopes_supported": scopes,
+            "bearer_methods_supported": ["header"],
+            "resource_documentation": issuer + "/docs"
+          };
+
+          context.setVariable("response.content", JSON.stringify(metadata, null, 2));
+          context.setVariable("response.header.Content-Type", "application/json");
+          context.setVariable("response.status.code", 200);
+
+  - name: JS-BuildAuthServerMetadata
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-BuildAuthServerMetadata
+        DisplayName: JS-BuildAuthServerMetadata
+        Properties: {}
+        Source: |
+          var issuer = context.getVariable("oauth_issuer_url");
+          var scopesStr = context.getVariable("supported_scopes") || "mcp openid profile email read write";
+          var scopes = scopesStr.split(/\s+/).filter(Boolean);
+
+          var metadata = {
+            "issuer": issuer,
+            "authorization_endpoint": issuer + "/authorize",
+            "token_endpoint": issuer + "/token",
+            "registration_endpoint": issuer + "/register",
+            "introspection_endpoint": issuer + "/introspect",
+            "revocation_endpoint": issuer + "/revoke",
+            "userinfo_endpoint": issuer + "/userinfo",
+            "jwks_uri": issuer + "/jwks.json",
+            "scopes_supported": scopes,
+            "response_types_supported": ["code"],
+            "response_modes_supported": ["query"],
+            "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
+            "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"],
+            "code_challenge_methods_supported": ["S256", "plain"],
+            "client_id_metadata_document_supported": true
+          };
+
+          context.setVariable("response.content", JSON.stringify(metadata, null, 2));
+          context.setVariable("response.header.Content-Type", "application/json");
+          context.setVariable("response.status.code", 200);
+
+  - name: JS-BuildOidcConfig
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-BuildOidcConfig
+        DisplayName: JS-BuildOidcConfig
+        Properties: {}
+        Source: |
+          var issuer = context.getVariable("oauth_issuer_url");
+          var scopesStr = context.getVariable("supported_scopes") || "mcp openid profile email read write";
+          var scopes = scopesStr.split(/\s+/).filter(Boolean);
+
+          var oidcConfig = {
+            "issuer": issuer,
+            "authorization_endpoint": issuer + "/authorize",
+            "token_endpoint": issuer + "/token",
+            "userinfo_endpoint": issuer + "/userinfo",
+            "jwks_uri": issuer + "/jwks.json",
+            "registration_endpoint": issuer + "/register",
+            "scopes_supported": scopes,
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code", "refresh_token", "client_credentials"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["HS256"],
+            "code_challenge_methods_supported": ["S256", "plain"]
+          };
+
+          context.setVariable("response.content", JSON.stringify(oidcConfig, null, 2));
+          context.setVariable("response.header.Content-Type", "application/json");
+          context.setVariable("response.status.code", 200);
+
+  - name: JS-BuildJwksResponse
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-BuildJwksResponse
+        DisplayName: JS-BuildJwksResponse
+        Properties: {}
+        Source: |
+          var jwks = {
+            "keys": [
+              {
+                "kty": "oct",
+                "use": "sig",
+                "alg": "HS256",
+                "kid": "apigee-oauth21-key-1"
+              }
+            ]
+          };
+          context.setVariable("response.content", JSON.stringify(jwks, null, 2));
+          context.setVariable("response.header.Content-Type", "application/json");
+          context.setVariable("response.status.code", 200);
+
+  - name: JS-ProcessDCRRequest
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ProcessDCRRequest
+        DisplayName: JS-ProcessDCRRequest
+        Properties: {}
+        Source: |
+          try {
+            var bodyStr = context.getVariable("request.content") || "{}";
+            var body = JSON.parse(bodyStr);
+
+            var clientName = (body.client_name || "MCP Client").trim();
+            var redirectUris = body.redirect_uris;
+
+            if (!redirectUris || !Array.isArray(redirectUris) || redirectUris.length === 0) {
+              throw new Error("Missing required 'redirect_uris' array.");
+            }
+
+            var devEmail = context.getVariable("default_dev_email");
+            var apiProduct = context.getVariable("default_api_product");
+
+            function randHex(len) {
+              var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+              var str = "";
+              for (var i = 0; i < len; i++) {
+                str += chars.charAt(Math.floor(Math.random() * chars.length));
+              }
+              return str;
+            }
+
+            var safeName = clientName.toLowerCase().replace(/[^a-z0-9_-]/g, "_").substring(0, 20);
+            var appName = "app_" + safeName + "_" + randHex(8);
+
+            context.setVariable("dcr_client_name", clientName);
+            context.setVariable("dcr_dev_email", devEmail);
+            context.setVariable("dcr_dev_username", "mcp_dev_" + randHex(6));
+            context.setVariable("dcr_dev_first_name", "MCP");
+            context.setVariable("dcr_dev_last_name", "Developer");
+            context.setVariable("dcr_app_name", appName);
+            context.setVariable("dcr_primary_redirect_uri", redirectUris[0]);
+            context.setVariable("dcr_redirect_uris_json", JSON.stringify(redirectUris));
+            context.setVariable("dcr_grant_types_json", JSON.stringify(body.grant_types || ["authorization_code", "refresh_token", "client_credentials"]));
+            context.setVariable("dcr_scope", body.scope || context.getVariable("supported_scopes") || "mcp openid profile email");
+
+            var appPayload = {
+              "name": appName,
+              "callbackUrl": redirectUris[0],
+              "attributes": [
+                { "name": "redirect_uris", "value": JSON.stringify(redirectUris) },
+                { "name": "grant_types", "value": JSON.stringify(body.grant_types || ["authorization_code", "refresh_token", "client_credentials"]) },
+                { "name": "scope", "value": body.scope || "mcp openid profile email" }
+              ]
+            };
+
+            if (apiProduct) {
+              appPayload.apiProducts = [apiProduct];
+            }
+
+            context.setVariable("dcr_create_app_payload", JSON.stringify(appPayload));
+            context.setVariable("dcr_create_developer", "true");
+            context.setVariable("dcr_create_app", "true");
+            context.setVariable("dcr_raw_request", JSON.stringify(body));
+            context.setVariable("dcr_error", "");
+
+          } catch (e) {
+            context.setVariable("dcr_create_developer", "false");
+            context.setVariable("dcr_create_app", "false");
+            context.setVariable("dcr_success", "false");
+            context.setVariable("dcr_error", "invalid_client_metadata");
+            context.setVariable("dcr_error_description", e.message || String(e));
+          }
+
+  - name: SC-CreateDeveloper
+    type: ServiceCallout
+    content:
+      ServiceCallout:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: SC-CreateDeveloper
+        DisplayName: SC-CreateDeveloper
+        Properties: {}
+        Request:
+          metadata:
+            clearPayload: "true"
+            variable: createDevRequest
+          IgnoreUnresolvedVariables: "true"
+          Set:
+            Verb: POST
+            Headers:
+              Header:
+                - metadata:
+                    name: Content-Type
+                  _text: application/json
+            Payload:
+              metadata:
+                contentType: application/json
+              _text: |
+                {
+                  "email": "{dcr_dev_email}",
+                  "firstName": "{dcr_dev_first_name}",
+                  "lastName": "{dcr_dev_last_name}",
+                  "userName": "{dcr_dev_username}"
+                }
+        Response: createDevResponse
+        HTTPTargetConnection:
+          Properties: {}
+          URL: "https://{apigee_api_host}/organizations/{organization.name}/developers"
+          Authentication:
+            GoogleAccessToken:
+              Scopes:
+                Scope: https://www.googleapis.com/auth/cloud-platform
+
+  - name: SC-CreateApp
+    type: ServiceCallout
+    content:
+      ServiceCallout:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: SC-CreateApp
+        DisplayName: SC-CreateApp
+        Properties: {}
+        Request:
+          metadata:
+            clearPayload: "true"
+            variable: createAppRequest
+          IgnoreUnresolvedVariables: "true"
+          Set:
+            Verb: POST
+            Headers:
+              Header:
+                - metadata:
+                    name: Content-Type
+                  _text: application/json
+            Payload:
+              metadata:
+                contentType: application/json
+              _text: "{dcr_create_app_payload}"
+        Response: createAppResponse
+        HTTPTargetConnection:
+          Properties: {}
+          URL: "https://{apigee_api_host}/organizations/{organization.name}/developers/{dcr_dev_email}/apps"
+          Authentication:
+            GoogleAccessToken:
+              Scopes:
+                Scope: https://www.googleapis.com/auth/cloud-platform
+
+  - name: JS-ProcessDCRResponse
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ProcessDCRResponse
+        DisplayName: JS-ProcessDCRResponse
+        Properties: {}
+        Source: |
+          try {
+            if (context.getVariable("dcr_error")) {
+              context.setVariable("dcr_success", "false");
+            } else {
+              function randHex(len) {
+                var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+                var str = "";
+                for (var i = 0; i < len; i++) {
+                  str += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                return str;
+              }
+
+              var clientId = "";
+              var clientSecret = "";
+
+              var appResContent = context.getVariable("createAppResponse.content");
+              if (appResContent) {
+                try {
+                  var appRes = JSON.parse(appResContent);
+                  if (appRes.credentials && appRes.credentials.length > 0) {
+                    clientId = appRes.credentials[0].consumerKey;
+                    clientSecret = appRes.credentials[0].consumerSecret;
+                  }
+                } catch (e) {
+                  // Fallback if parsing fails
+                }
+              }
+
+              // Self-contained fallback if Apigee Admin API credentials were not returned
+              if (!clientId) {
+                clientId = "mcp_client_" + randHex(16);
+                clientSecret = "mcp_sec_" + randHex(32);
+              }
+
+              var rawReq = JSON.parse(context.getVariable("dcr_raw_request") || "{}");
+              var redirectUris = JSON.parse(context.getVariable("dcr_redirect_uris_json") || "[]");
+              var grantTypes = JSON.parse(context.getVariable("dcr_grant_types_json") || '["authorization_code", "refresh_token", "client_credentials"]');
+
+              var clientRecord = {
+                "client_id": clientId,
+                "client_secret": clientSecret,
+                "client_name": context.getVariable("dcr_client_name"),
+                "redirect_uris": redirectUris,
+                "grant_types": grantTypes,
+                "response_types": rawReq.response_types || ["code"],
+                "scope": context.getVariable("dcr_scope"),
+                "token_endpoint_auth_method": rawReq.token_endpoint_auth_method || "client_secret_post",
+                "client_id_issued_at": Math.floor(Date.now() / 1000)
+              };
+
+              context.setVariable("client_id_to_lookup", clientId);
+              context.setVariable("client_record_data", JSON.stringify(clientRecord));
+              context.setVariable("dcr_success", "true");
+              context.setVariable("dcr_response_json", JSON.stringify(clientRecord, null, 2));
+            }
+          } catch (err) {
+            context.setVariable("dcr_success", "false");
+            context.setVariable("dcr_error", "server_error");
+            context.setVariable("dcr_error_description", "Failed to process dynamic client registration: " + err);
+          }
+
+  - name: PC-StoreClient
+    type: PopulateCache
+    content:
+      PopulateCache:
+        metadata:
+          name: PC-StoreClient
+        CacheKey:
+          Prefix: OAuth21-Client
+          KeyFragment:
+            metadata:
+              ref: client_id_to_lookup
+        ExpirySettings:
+          TimeoutInSec: "86400"
+        Source: client_record_data
+
+  - name: AM-RegisterSuccess
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-RegisterSuccess
+        Set:
+          StatusCode: "201"
+          ReasonPhrase: Created
+          Payload:
+            metadata:
+              contentType: application/json
+            _text: "{dcr_response_json}"
+
+  - name: AM-RegisterFailure
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-RegisterFailure
+        Set:
+          StatusCode: "400"
+          ReasonPhrase: Bad Request
+          Payload:
+            metadata:
+              contentType: application/json
+            _text: |
+              {
+                "error": "{dcr_error}",
+                "error_description": "{dcr_error_description}"
+              }
+
+  - name: JS-ExtractAuthorizeParams
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ExtractAuthorizeParams
+        DisplayName: JS-ExtractAuthorizeParams
+        Properties: {}
+        Source: |
+          var verb = context.getVariable("request.verb");
+          var clientId, redirectUri, responseType, scope, state, codeChallenge, codeChallengeMethod;
+
+          if (verb === "POST") {
+            clientId = context.getVariable("request.formparam.client_id") || "";
+            redirectUri = context.getVariable("request.formparam.redirect_uri") || "";
+            responseType = context.getVariable("request.formparam.response_type") || "";
+            scope = context.getVariable("request.formparam.scope") || "";
+            state = context.getVariable("request.formparam.state") || "";
+            codeChallenge = context.getVariable("request.formparam.code_challenge") || "";
+            codeChallengeMethod = context.getVariable("request.formparam.code_challenge_method") || "";
+          } else {
+            clientId = context.getVariable("request.queryparam.client_id") || "";
+            redirectUri = context.getVariable("request.queryparam.redirect_uri") || "";
+            responseType = context.getVariable("request.queryparam.response_type") || "";
+            scope = context.getVariable("request.queryparam.scope") || "";
+            state = context.getVariable("request.queryparam.state") || "";
+            codeChallenge = context.getVariable("request.queryparam.code_challenge") || "";
+            codeChallengeMethod = context.getVariable("request.queryparam.code_challenge_method") || "";
+          }
+
+          clientId = clientId.trim();
+          redirectUri = redirectUri.trim();
+
+          context.setVariable("auth_client_id", clientId);
+          context.setVariable("auth_redirect_uri", redirectUri);
+          context.setVariable("auth_response_type", responseType);
+          context.setVariable("auth_scope", scope || "mcp");
+          context.setVariable("auth_state", state);
+          context.setVariable("auth_code_challenge", codeChallenge);
+          context.setVariable("auth_code_challenge_method", codeChallengeMethod || "S256");
+
+          // Determine if client_id is a Client ID Metadata Document URL (CIMD)
+          if (clientId.indexOf("http://") === 0 || clientId.indexOf("https://") === 0) {
+            context.setVariable("is_cimd", "true");
+            var targetUrl = clientId.replace(/^https?:\/\//i, "");
+            context.setVariable("cimd_target_url", targetUrl);
+            context.setVariable("cimd_client_id", clientId);
+            context.setVariable("client_id_to_lookup", "");
+          } else {
+            context.setVariable("is_cimd", "false");
+            context.setVariable("cimd_target_url", "");
+            context.setVariable("cimd_client_id", "");
+            context.setVariable("client_id_to_lookup", clientId);
+          }
+
+  - name: LC-LookupCIMD
+    type: LookupCache
+    content:
+      LookupCache:
+        metadata:
+          name: LC-LookupCIMD
+        CacheKey:
+          Prefix: OAuth21-CIMD
+          KeyFragment:
+            metadata:
+              ref: cimd_client_id
+        AssignTo: cimd_doc_cached
+
+  - name: SC-FetchCIMD
+    type: ServiceCallout
+    content:
+      ServiceCallout:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: SC-FetchCIMD
+        DisplayName: SC-FetchCIMD
+        Properties: {}
+        Request:
+          metadata:
+            clearPayload: "true"
+            variable: fetchCimdRequest
+          IgnoreUnresolvedVariables: "true"
+          Set:
+            Verb: GET
+            Headers:
+              Header:
+                - metadata:
+                    name: Accept
+                  _text: application/json
+        Response: fetchCimdResponse
+        HTTPTargetConnection:
+          Properties: {}
+          URL: "https://{cimd_target_url}"
+
+  - name: LC-LookupClient
+    type: LookupCache
+    content:
+      LookupCache:
+        metadata:
+          name: LC-LookupClient
+        CacheKey:
+          Prefix: OAuth21-Client
+          KeyFragment:
+            metadata:
+              ref: client_id_to_lookup
+        AssignTo: client_record_cached
+
+  - name: SC-GetApigeeApp
+    type: ServiceCallout
+    content:
+      ServiceCallout:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: SC-GetApigeeApp
+        DisplayName: SC-GetApigeeApp
+        Properties: {}
+        Request:
+          metadata:
+            clearPayload: "true"
+            variable: getAppRequest
+          IgnoreUnresolvedVariables: "true"
+          Set:
+            Verb: GET
+        Response: getAppResponse
+        HTTPTargetConnection:
+          Properties: {}
+          URL: "https://{apigee_api_host}/organizations/{organization.name}/apps/{client_id_to_lookup}"
+          Authentication:
+            GoogleAccessToken:
+              Scopes:
+                Scope: https://www.googleapis.com/auth/cloud-platform
+
+  - name: JS-ValidateAuthorize
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ValidateAuthorize
+        DisplayName: JS-ValidateAuthorize
+        Properties: {}
+        Source: |
+          var clientId = context.getVariable("auth_client_id");
+          var redirectUri = context.getVariable("auth_redirect_uri");
+          var responseType = context.getVariable("auth_response_type");
+          var codeChallenge = context.getVariable("auth_code_challenge");
+          var codeChallengeMethod = context.getVariable("auth_code_challenge_method");
+          var isCimd = context.getVariable("is_cimd") === "true";
+
+          var error = null;
+          var errorDesc = null;
+          var clientDisplayName = clientId;
+
+          if (!clientId) {
+            error = "invalid_client";
+            errorDesc = "client_id parameter is required.";
+          } else if (!redirectUri) {
+            error = "invalid_request";
+            errorDesc = "redirect_uri parameter is required.";
+          } else if (responseType !== "code") {
+            error = "unsupported_response_type";
+            errorDesc = "Only response_type=code is supported under OAuth 2.1.";
+          } else if (!codeChallenge) {
+            error = "invalid_request";
+            errorDesc = "Proof Key for Code Exchange (PKCE) code_challenge is MANDATORY under OAuth 2.1.";
+          } else if (codeChallengeMethod !== "S256" && codeChallengeMethod !== "plain") {
+            error = "invalid_request";
+            errorDesc = "PKCE code_challenge_method must be 'S256' or 'plain'.";
+          }
+
+          if (!error) {
+            if (isCimd) {
+              // Validate Client ID Metadata Document (CIMD)
+              var cimdContent = context.getVariable("cimd_doc_cached") || context.getVariable("fetchCimdResponse.content");
+              if (cimdContent) {
+                try {
+                  var cimdDoc = JSON.parse(cimdContent);
+                  clientDisplayName = cimdDoc.client_name || cimdDoc.client_id || clientId;
+                  var allowedUris = cimdDoc.redirect_uris || [];
+                  var uriMatch = false;
+                  for (var i = 0; i < allowedUris.length; i++) {
+                    if (String(allowedUris[i]).trim() === redirectUri) {
+                      uriMatch = true;
+                      break;
+                    }
+                  }
+                  if (!uriMatch && allowedUris.length > 0) {
+                    error = "invalid_redirect_uri";
+                    errorDesc = "redirect_uri does not match any registered in CIMD document.";
+                  }
+                } catch (e) {
+                  error = "invalid_client";
+                  errorDesc = "Failed to parse Client ID Metadata Document from URL.";
+                }
+              }
+            } else {
+              // Validate Registered DCR or Apigee App client
+              var clientCached = context.getVariable("client_record_cached");
+              var appRes = context.getVariable("getAppResponse.content");
+              if (clientCached) {
+                try {
+                  var clientData = JSON.parse(clientCached);
+                  clientDisplayName = clientData.client_name || clientId;
+                  var uris = clientData.redirect_uris || [];
+                  var matched = false;
+                  for (var j = 0; j < uris.length; j++) {
+                    if (String(uris[j]).trim() === redirectUri) {
+                      matched = true;
+                      break;
+                    }
+                  }
+                  if (!matched && uris.length > 0) {
+                    error = "invalid_redirect_uri";
+                    errorDesc = "redirect_uri mismatch with client registration.";
+                  }
+                } catch (e2) {}
+              } else if (appRes) {
+                try {
+                  var appData = JSON.parse(appRes);
+                  clientDisplayName = appData.name || clientId;
+                  if (appData.callbackUrl && appData.callbackUrl !== redirectUri) {
+                    if (redirectUri.indexOf(appData.callbackUrl) !== 0) {
+                      error = "invalid_redirect_uri";
+                      errorDesc = "redirect_uri does not match Apigee developer app callbackUrl.";
+                    }
+                  }
+                } catch (e3) {}
+              }
+            }
+          }
+
+          context.setVariable("auth_client_display_name", clientDisplayName);
+
+          if (error) {
+            context.setVariable("authorize_valid", "false");
+            context.setVariable("authorize_error", error);
+            context.setVariable("authorize_error_description", errorDesc);
+          } else {
+            context.setVariable("authorize_valid", "true");
+            context.setVariable("authorize_error", "");
+            context.setVariable("authorize_error_description", "");
+          }
+
+  - name: AM-AuthorizeForm
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-AuthorizeForm
+        IgnoreUnresolvedVariables: "true"
+        Set:
+          Payload:
+            metadata:
+              contentType: text/html; charset=utf-8
+            _text: |
+              <!DOCTYPE html>
+              <html lang="en">
+              <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Authorize Access | OAuth 2.1</title>
+                <style>
+                  :root {
+                    --primary: #2563eb;
+                    --primary-hover: #1d4ed8;
+                    --bg: #0f172a;
+                    --card: #1e293b;
+                    --border: #334155;
+                    --text: #f8fafc;
+                    --text-muted: #94a3b8;
+                  }
+                  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+                  body { background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+                  .container { background: var(--card); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 440px; padding: 32px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); }
+                  .badge { display: inline-block; background: rgba(37, 99, 235, 0.2); color: #60a5fa; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; margin-bottom: 16px; }
+                  h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+                  p { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+                  .scopes { background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 24px; }
+                  .scopes-title { font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+                  .scope-tag { display: inline-block; background: #334155; color: #e2e8f0; font-size: 12px; padding: 2px 8px; border-radius: 6px; margin-right: 4px; margin-bottom: 4px; font-family: monospace; }
+                  .form-group { margin-bottom: 16px; }
+                  label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
+                  input[type="text"], input[type="password"] { width: 100%; background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: #fff; font-size: 14px; outline: none; }
+                  input:focus { border-color: var(--primary); }
+                  .btn { width: 100%; background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 8px; }
+                  .btn:hover { background: var(--primary-hover); }
+                  .error-banner { background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 12px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <span class="badge">OAuth 2.1 Authorization</span>
+                  <h1>Authorize Client</h1>
+                  <p><strong>{auth_client_display_name}</strong> requests access to your MCP & REST services.</p>
+
+                  <div class="scopes">
+                    <div class="scopes-title">Requested Scopes</div>
+                    <div><span class="scope-tag">{auth_scope}</span></div>
+                  </div>
+
+                  <form action="/authorize" method="POST">
+                    <input type="hidden" name="client_id" value="{auth_client_id}">
+                    <input type="hidden" name="redirect_uri" value="{auth_redirect_uri}">
+                    <input type="hidden" name="response_type" value="{auth_response_type}">
+                    <input type="hidden" name="scope" value="{auth_scope}">
+                    <input type="hidden" name="state" value="{auth_state}">
+                    <input type="hidden" name="code_challenge" value="{auth_code_challenge}">
+                    <input type="hidden" name="code_challenge_method" value="{auth_code_challenge_method}">
+
+                    <div class="form-group">
+                      <label for="username">User Identifier / Email</label>
+                      <input type="text" id="username" name="username" placeholder="user@example.com" value="mcp-user" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="password">Password / Passcode</label>
+                      <input type="password" id="password" name="password" placeholder="••••••••" value="password" required>
+                    </div>
+
+                    <button type="submit" class="btn">Approve & Authorize</button>
+                  </form>
+                </div>
+              </body>
+              </html>
+
+  - name: JS-AuthenticateAndIssueCode
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-AuthenticateAndIssueCode
+        DisplayName: JS-AuthenticateAndIssueCode
+        Properties: {}
+        Source: |
+          function randHex(len) {
+            var chars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            var str = "";
+            for (var i = 0; i < len; i++) {
+              str += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return str;
+          }
+
+          var username = (context.getVariable("request.formparam.username") || "mcp-user").trim();
+          var authCode = "code_" + randHex(32);
+
+          var codePayload = {
+            "client_id": context.getVariable("auth_client_id"),
+            "redirect_uri": context.getVariable("auth_redirect_uri"),
+            "scope": context.getVariable("auth_scope"),
+            "code_challenge": context.getVariable("auth_code_challenge"),
+            "code_challenge_method": context.getVariable("auth_code_challenge_method") || "S256",
+            "username": username,
+            "auth_time": Math.floor(Date.now() / 1000)
+          };
+
+          context.setVariable("auth_code", authCode);
+          context.setVariable("auth_code_data", JSON.stringify(codePayload));
+          context.setVariable("auth_success", "true");
+
+          var redirectUri = context.getVariable("auth_redirect_uri");
+          var state = context.getVariable("auth_state") || "";
+          var delimiter = redirectUri.indexOf("?") === -1 ? "?" : "&";
+          var targetLocation = redirectUri + delimiter + "code=" + encodeURIComponent(authCode);
+          if (state) {
+            targetLocation += "&state=" + encodeURIComponent(state);
+          }
+
+          context.setVariable("auth_redirect_location", targetLocation);
+
+  - name: PC-StoreCode
+    type: PopulateCache
+    content:
+      PopulateCache:
+        metadata:
+          name: PC-StoreCode
+        CacheKey:
+          Prefix: OAuth21-Code
+          KeyFragment:
+            metadata:
+              ref: auth_code
+        ExpirySettings:
+          TimeoutInSec: "600"
+        Source: auth_code_data
+
+  - name: AM-AuthorizeRedirect
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-AuthorizeRedirect
+        Set:
+          StatusCode: "302"
+          ReasonPhrase: Found
+          Headers:
+            Header:
+              - metadata:
+                  name: Location
+                _text: "{auth_redirect_location}"
+          Payload:
+            metadata:
+              contentType: text/plain
+            _text: Redirecting to {auth_redirect_location}
+
+  - name: AM-AuthorizeErrorResponse
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-AuthorizeErrorResponse
+        Set:
+          StatusCode: "400"
+          ReasonPhrase: Bad Request
+          Payload:
+            metadata:
+              contentType: application/json
+            _text: |
+              {
+                "error": "{authorize_error}",
+                "error_description": "{authorize_error_description}"
+              }
+
+  - name: JS-ExtractTokenParams
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ExtractTokenParams
+        DisplayName: JS-ExtractTokenParams
+        Properties: {}
+        Source: |
+          var grantType = (context.getVariable("request.formparam.grant_type") || "").trim();
+          var code = (context.getVariable("request.formparam.code") || "").trim();
+          var codeVerifier = (context.getVariable("request.formparam.code_verifier") || "").trim();
+          var redirectUri = (context.getVariable("request.formparam.redirect_uri") || "").trim();
+          var clientId = (context.getVariable("request.formparam.client_id") || "").trim();
+          var clientSecret = (context.getVariable("request.formparam.client_secret") || "").trim();
+          var refreshToken = (context.getVariable("request.formparam.refresh_token") || "").trim();
+          var scope = (context.getVariable("request.formparam.scope") || "").trim();
+
+          // Check Basic Authorization header for client credentials
+          var authHeader = context.getVariable("request.header.Authorization") || "";
+          if (authHeader.indexOf("Basic ") === 0) {
+            try {
+              var encoded = authHeader.substring(6).trim();
+              // Pure JS Base64 decode
+              var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+              var str = String(encoded).replace(/=+$/, '');
+              var decoded = '';
+              for (var bc = 0, bs, buffer, idx = 0; buffer = str.charAt(idx++); ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? decoded += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
+                buffer = chars.indexOf(buffer);
+              }
+              var colonIdx = decoded.indexOf(":");
+              if (colonIdx > -1) {
+                if (!clientId) clientId = decoded.substring(0, colonIdx);
+                if (!clientSecret) clientSecret = decoded.substring(colonIdx + 1);
+              }
+            } catch (e) {}
+          }
+
+          context.setVariable("token_grant_type", grantType);
+          context.setVariable("token_code", code);
+          context.setVariable("token_code_verifier", codeVerifier);
+          context.setVariable("token_redirect_uri", redirectUri);
+          context.setVariable("token_client_id", clientId);
+          context.setVariable("token_client_secret", clientSecret);
+          context.setVariable("token_refresh_token", refreshToken);
+          context.setVariable("token_scope_req", scope);
+
+          if (grantType === "authorization_code") {
+            context.setVariable("auth_code", code);
+          } else if (grantType === "refresh_token") {
+            context.setVariable("refresh_token", refreshToken);
+          }
+
+          if (clientId.indexOf("http://") === 0 || clientId.indexOf("https://") === 0) {
+            context.setVariable("is_cimd", "true");
+            var targetUrl = clientId.replace(/^https?:\/\//i, "");
+            context.setVariable("cimd_target_url", targetUrl);
+            context.setVariable("cimd_client_id", clientId);
+            context.setVariable("client_id_to_lookup", "");
+          } else {
+            context.setVariable("is_cimd", "false");
+            context.setVariable("cimd_target_url", "");
+            context.setVariable("cimd_client_id", "");
+            context.setVariable("client_id_to_lookup", clientId);
+          }
+
+  - name: LC-LookupCode
+    type: LookupCache
+    content:
+      LookupCache:
+        metadata:
+          name: LC-LookupCode
+        CacheKey:
+          Prefix: OAuth21-Code
+          KeyFragment:
+            metadata:
+              ref: auth_code
+        AssignTo: auth_code_data
+
+  - name: LC-LookupRefreshToken
+    type: LookupCache
+    content:
+      LookupCache:
+        metadata:
+          name: LC-LookupRefreshToken
+        CacheKey:
+          Prefix: OAuth21-Refresh
+          KeyFragment:
+            metadata:
+              ref: refresh_token
+        AssignTo: refresh_token_data
+
+  - name: JS-VerifyTokenRequest
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-VerifyTokenRequest
+        DisplayName: JS-VerifyTokenRequest
+        Properties: {}
+        Source: |
+          // Pure JS SHA-256 for PKCE S256 validation
+          function sha256_base64url(ascii) {
+            function rotateRight(n, x) { return (n >>> x) | (n << (32 - x)); }
+            var h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
+            var h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+            var k = [
+              0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+              0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+              0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+              0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+              0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+              0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+              0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+              0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+            ];
+            var msgBytes = [];
+            for (var i = 0; i < ascii.length; i++) msgBytes.push(ascii.charCodeAt(i) & 0xFF);
+            var msgLenBits = msgBytes.length * 8;
+            msgBytes.push(0x80);
+            while ((msgBytes.length + 8) % 64 !== 0) msgBytes.push(0x00);
+            msgBytes.push(0x00, 0x00, 0x00, 0x00, (msgLenBits >>> 24) & 0xFF, (msgLenBits >>> 16) & 0xFF, (msgLenBits >>> 8) & 0xFF, msgLenBits & 0xFF);
+
+            for (var chunkStart = 0; chunkStart < msgBytes.length; chunkStart += 64) {
+              var w = new Array(64);
+              for (var i = 0; i < 16; i++) {
+                w[i] = (msgBytes[chunkStart + i * 4] << 24) | (msgBytes[chunkStart + i * 4 + 1] << 16) | (msgBytes[chunkStart + i * 4 + 2] << 8) | msgBytes[chunkStart + i * 4 + 3];
+              }
+              for (var i = 16; i < 64; i++) {
+                var s0 = rotateRight(w[i - 15], 7) ^ rotateRight(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+                var s1 = rotateRight(w[i - 2], 17) ^ rotateRight(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+                w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+              }
+              var a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+              for (var i = 0; i < 64; i++) {
+                var s1_e = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+                var ch = (e & f) ^ (~e & g);
+                var temp1 = (h + s1_e + ch + k[i] + w[i]) | 0;
+                var s0_a = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+                var maj = (a & b) ^ (a & c) ^ (b & c);
+                var temp2 = (s0_a + maj) | 0;
+                h = g; g = f; f = e; e = (d + temp1) | 0; d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+              }
+              h0 = (h0 + a) | 0; h1 = (h1 + b) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0;
+              h4 = (h4 + e) | 0; h5 = (h5 + f) | 0; h6 = (h6 + g) | 0; h7 = (h7 + h) | 0;
+            }
+            var bytes = [];
+            var words = [h0, h1, h2, h3, h4, h5, h6, h7];
+            for (var i = 0; i < 8; i++) {
+              bytes.push((words[i] >>> 24) & 0xFF, (words[i] >>> 16) & 0xFF, (words[i] >>> 8) & 0xFF, words[i] & 0xFF);
+            }
+            var base64 = "";
+            var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+            for (var i = 0; i < bytes.length; i += 3) {
+              var b1 = bytes[i], b2 = i + 1 < bytes.length ? bytes[i + 1] : NaN, b3 = i + 2 < bytes.length ? bytes[i + 2] : NaN;
+              var enc1 = b1 >> 2;
+              var enc2 = ((b1 & 3) << 4) | (isNaN(b2) ? 0 : b2 >> 4);
+              var enc3 = isNaN(b2) ? NaN : (((b2 & 15) << 2) | (isNaN(b3) ? 0 : b3 >> 6));
+              var enc4 = isNaN(b3) ? NaN : b3 & 63;
+              base64 += chars.charAt(enc1) + chars.charAt(enc2);
+              if (!isNaN(enc3)) base64 += chars.charAt(enc3);
+              if (!isNaN(enc4)) base64 += chars.charAt(enc4);
+            }
+            return base64;
+          }
+
+          var grantType = context.getVariable("token_grant_type");
+          var issuer = context.getVariable("oauth_issuer_url");
+          var error = null;
+          var errorDesc = null;
+
+          if (grantType === "authorization_code") {
+            var codeDataStr = context.getVariable("auth_code_data");
+            var codeVerifier = context.getVariable("token_code_verifier") || "";
+            var clientIdSub = context.getVariable("token_client_id");
+            var redirectUriSub = context.getVariable("token_redirect_uri");
+
+            if (!codeDataStr) {
+              error = "invalid_grant";
+              errorDesc = "Authorization code is invalid or expired.";
+            } else {
+              try {
+                var codeData = JSON.parse(codeDataStr);
+                if (clientIdSub && clientIdSub !== codeData.client_id) {
+                  error = "invalid_client";
+                  errorDesc = "client_id mismatch.";
+                } else if (redirectUriSub && redirectUriSub !== codeData.redirect_uri) {
+                  error = "invalid_grant";
+                  errorDesc = "redirect_uri mismatch.";
+                } else if (!codeVerifier) {
+                  error = "invalid_request";
+                  errorDesc = "code_verifier parameter is required for PKCE.";
+                } else {
+                  var expectedChallenge = codeData.code_challenge;
+                  var method = codeData.code_challenge_method || "S256";
+                  var calculated = (method === "S256") ? sha256_base64url(codeVerifier) : codeVerifier;
+                  if (calculated !== expectedChallenge) {
+                    error = "invalid_grant";
+                    errorDesc = "PKCE verification failed.";
+                  }
+                }
+
+                if (!error) {
+                  context.setVariable("token_issuer", issuer);
+                  context.setVariable("token_client_id", codeData.client_id);
+                  context.setVariable("token_subject", codeData.username || codeData.client_id);
+                  context.setVariable("token_email", codeData.username + "@example.com");
+                  context.setVariable("token_name", codeData.username || "MCP User");
+                  var scope = codeData.scope || "mcp";
+                  context.setVariable("token_scope", scope);
+                  context.setVariable("token_type_claim", "Bearer");
+                  context.setVariable("token_auth_time", String(codeData.auth_time || Math.floor(Date.now() / 1000)));
+                  context.setVariable("token_nonce", "nonce_" + String(Date.now()));
+                  context.setVariable("token_scope_has_openid", scope.indexOf("openid") !== -1 ? "true" : "false");
+                  context.setVariable("token_generation_allowed", "true");
+                }
+              } catch (e) {
+                error = "invalid_grant";
+                errorDesc = "Failed to parse authorization code.";
+              }
+            }
+          } else if (grantType === "refresh_token") {
+            var refreshDataStr = context.getVariable("refresh_token_data");
+            var clientIdReq = context.getVariable("token_client_id");
+
+            if (!refreshDataStr) {
+              error = "invalid_grant";
+              errorDesc = "Refresh token is invalid or expired.";
+            } else {
+              try {
+                var rData = JSON.parse(refreshDataStr);
+                if (clientIdReq && clientIdReq !== rData.client_id) {
+                  error = "invalid_client";
+                  errorDesc = "client_id mismatch with refresh token.";
+                } else {
+                  context.setVariable("token_issuer", issuer);
+                  context.setVariable("token_client_id", rData.client_id);
+                  context.setVariable("token_subject", rData.username || rData.client_id);
+                  context.setVariable("token_email", rData.email || (rData.username + "@example.com"));
+                  context.setVariable("token_name", rData.name || rData.username || "MCP User");
+                  var rScope = rData.scope || "mcp";
+                  context.setVariable("token_scope", rScope);
+                  context.setVariable("token_type_claim", "Bearer");
+                  context.setVariable("token_auth_time", String(Math.floor(Date.now() / 1000)));
+                  context.setVariable("token_nonce", "nonce_" + String(Date.now()));
+                  context.setVariable("token_scope_has_openid", rScope.indexOf("openid") !== -1 ? "true" : "false");
+                  context.setVariable("token_generation_allowed", "true");
+                }
+              } catch (e2) {
+                error = "invalid_grant";
+                errorDesc = "Failed to parse refresh token.";
+              }
+            }
+          } else if (grantType === "client_credentials") {
+            var ccClientId = context.getVariable("token_client_id");
+            var ccScope = context.getVariable("token_scope_req") || "mcp";
+
+            if (!ccClientId) {
+              error = "invalid_client";
+              errorDesc = "client_id is required for client_credentials grant.";
+            } else {
+              context.setVariable("token_issuer", issuer);
+              context.setVariable("token_client_id", ccClientId);
+              context.setVariable("token_subject", ccClientId);
+              context.setVariable("token_email", ccClientId + "@service.apigee.internal");
+              context.setVariable("token_name", ccClientId);
+              context.setVariable("token_scope", ccScope);
+              context.setVariable("token_type_claim", "Bearer");
+              context.setVariable("token_auth_time", String(Math.floor(Date.now() / 1000)));
+              context.setVariable("token_scope_has_openid", "false");
+              context.setVariable("token_generation_allowed", "true");
+            }
+          } else {
+            error = "unsupported_grant_type";
+            errorDesc = "Unsupported grant_type. Supported values: authorization_code, refresh_token, client_credentials.";
+          }
+
+          if (error) {
+            context.setVariable("token_generation_allowed", "false");
+            context.setVariable("token_error", error);
+            context.setVariable("token_error_description", errorDesc);
+          } else {
+            var tokenFormatPref = context.getVariable("oauth_token_format_pref") || "jwt";
+            var isCimd = context.getVariable("is_cimd") === "true";
+            var actualFormat = "jwt";
+
+            if (tokenFormatPref === "opaque") {
+              actualFormat = "opaque";
+            } else if (tokenFormatPref === "auto") {
+              actualFormat = isCimd ? "jwt" : "opaque";
+            } else {
+              actualFormat = "jwt";
+            }
+            context.setVariable("token_format_to_issue", actualFormat);
+          }
+
+  - name: IC-InvalidateCode
+    type: InvalidateCache
+    content:
+      InvalidateCache:
+        metadata:
+          name: IC-InvalidateCode
+        CacheKey:
+          Prefix: OAuth21-Code
+          KeyFragment:
+            metadata:
+              ref: auth_code
+
+  - name: IC-InvalidateRefreshToken
+    type: InvalidateCache
+    content:
+      InvalidateCache:
+        metadata:
+          name: IC-InvalidateRefreshToken
+        CacheKey:
+          Prefix: OAuth21-Refresh
+          KeyFragment:
+            metadata:
+              ref: refresh_token
+
+  - name: JWT-GenerateAccessToken
+    type: GenerateJWT
+    content:
+      GenerateJWT:
+        metadata:
+          name: JWT-GenerateAccessToken
+        Algorithm: HS256
+        IgnoreUnresolvedVariables: "false"
+        SecretKey:
+          Value:
+            metadata:
+              ref: private.jwt_signing_secret
+        Issuer:
+          metadata:
+            ref: token_issuer
+        Audience:
+          metadata:
+            ref: token_client_id
+        ExpiresIn: 1h
+        Subject:
+          metadata:
+            ref: token_subject
+        AdditionalClaims:
+          Claim:
+            - metadata:
+                name: scope
+                ref: token_scope
+            - metadata:
+                name: client_id
+                ref: token_client_id
+            - metadata:
+                name: email
+                ref: token_email
+            - metadata:
+                name: name
+                ref: token_name
+            - metadata:
+                name: token_type
+                ref: token_type_claim
+        OutputVariable: token_access_token
+
+  - name: JWT-GenerateIDToken
+    type: GenerateJWT
+    content:
+      GenerateJWT:
+        metadata:
+          name: JWT-GenerateIDToken
+        Algorithm: HS256
+        IgnoreUnresolvedVariables: "true"
+        SecretKey:
+          Value:
+            metadata:
+              ref: private.jwt_signing_secret
+        Issuer:
+          metadata:
+            ref: token_issuer
+        Audience:
+          metadata:
+            ref: token_client_id
+        ExpiresIn: 1h
+        Subject:
+          metadata:
+            ref: token_subject
+        AdditionalClaims:
+          Claim:
+            - metadata:
+                name: email
+                ref: token_email
+            - metadata:
+                name: name
+                ref: token_name
+            - metadata:
+                name: auth_time
+                ref: token_auth_time
+            - metadata:
+                name: nonce
+                ref: token_nonce
+        OutputVariable: token_id_token
+
+  - name: JS-FinalizeTokenResponse
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-FinalizeTokenResponse
+        DisplayName: JS-FinalizeTokenResponse
+        Properties: {}
+        Source: |
+          function randHex(len) {
+            var chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+            var str = "";
+            for (var i = 0; i < len; i++) {
+              str += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return str;
+          }
+
+          var grantType = context.getVariable("token_grant_type");
+          var formatToIssue = context.getVariable("token_format_to_issue") || "jwt";
+          var accessToken = "";
+
+          if (formatToIssue === "opaque") {
+            accessToken = "at_" + randHex(32);
+            context.setVariable("token_access_token", accessToken);
+
+            var opaqueTokenRecord = {
+              "access_token": accessToken,
+              "client_id": context.getVariable("token_client_id"),
+              "sub": context.getVariable("token_subject"),
+              "email": context.getVariable("token_email"),
+              "name": context.getVariable("token_name"),
+              "scope": context.getVariable("token_scope"),
+              "iss": context.getVariable("token_issuer"),
+              "exp": Math.floor(Date.now() / 1000) + 3600,
+              "iat": Math.floor(Date.now() / 1000)
+            };
+            context.setVariable("opaque_access_token_data", JSON.stringify(opaqueTokenRecord));
+          } else {
+            accessToken = context.getVariable("token_access_token");
+          }
+
+          var newRefreshToken = "rt_" + randHex(32);
+          context.setVariable("token_refresh_token", newRefreshToken);
+
+          var refreshRecord = {
+            "client_id": context.getVariable("token_client_id"),
+            "username": context.getVariable("token_subject"),
+            "email": context.getVariable("token_email"),
+            "name": context.getVariable("token_name"),
+            "scope": context.getVariable("token_scope")
+          };
+          context.setVariable("new_refresh_token_data", JSON.stringify(refreshRecord));
+
+          var responseObj = {
+            "access_token": accessToken,
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": context.getVariable("token_scope")
+          };
+
+          if (grantType !== "client_credentials") {
+            responseObj.refresh_token = newRefreshToken;
+          }
+
+          if (context.getVariable("token_scope_has_openid") === "true") {
+            var idToken = context.getVariable("token_id_token");
+            if (idToken) {
+              responseObj.id_token = idToken;
+            }
+          }
+
+          context.setVariable("final_token_response", JSON.stringify(responseObj, null, 2));
+
+  - name: PC-StoreOpaqueAccessToken
+    type: PopulateCache
+    content:
+      PopulateCache:
+        metadata:
+          name: PC-StoreOpaqueAccessToken
+        CacheKey:
+          Prefix: OAuth21-AccessToken
+          KeyFragment:
+            metadata:
+              ref: token_access_token
+        ExpirySettings:
+          TimeoutInSec: "3600"
+        Source: opaque_access_token_data
+
+  - name: PC-StoreRefreshToken
+    type: PopulateCache
+    content:
+      PopulateCache:
+        metadata:
+          name: PC-StoreRefreshToken
+        CacheKey:
+          Prefix: OAuth21-Refresh
+          KeyFragment:
+            metadata:
+              ref: token_refresh_token
+        ExpirySettings:
+          TimeoutInSec: "2592000"
+        Source: new_refresh_token_data
+
+  - name: AM-TokenResponse
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-TokenResponse
+        Set:
+          Payload:
+            metadata:
+              contentType: application/json
+            _text: "{final_token_response}"
+
+  - name: AM-TokenErrorResponse
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-TokenErrorResponse
+        Set:
+          StatusCode: "400"
+          ReasonPhrase: Bad Request
+          Payload:
+            metadata:
+              contentType: application/json
+            _text: |
+              {
+                "error": "{token_error}",
+                "error_description": "{token_error_description}"
+              }
+
+  - name: JS-ExtractIntrospectParams
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ExtractIntrospectParams
+        DisplayName: JS-ExtractIntrospectParams
+        Properties: {}
+        Source: |
+          var token = (context.getVariable("request.formparam.token") || "").trim();
+          if (!token) {
+            token = (context.getVariable("request.queryparam.token") || "").trim();
+          }
+          context.setVariable("introspect_token", token);
+
+          if (token.split(".").length === 3) {
+            context.setVariable("introspect_token_format", "jwt");
+          } else if (token) {
+            context.setVariable("introspect_token_format", "opaque");
+          } else {
+            context.setVariable("introspect_token_format", "none");
+          }
+
+  - name: LC-LookupOpaqueIntrospectToken
+    type: LookupCache
+    content:
+      LookupCache:
+        metadata:
+          name: LC-LookupOpaqueIntrospectToken
+        AssignTo: opaque_introspect_data
+        CacheKey:
+          Prefix: OAuth21-AccessToken
+          KeyFragment:
+            metadata:
+              ref: introspect_token
+
+  - name: JWT-VerifyIntrospectToken
+    type: VerifyJWT
+    content:
+      VerifyJWT:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: JWT-VerifyIntrospectToken
+        Algorithm: HS256
+        IgnoreUnresolvedVariables: "true"
+        SecretKey:
+          Value:
+            metadata:
+              ref: private.jwt_signing_secret
+        Source: introspect_token
+
+  - name: JS-FormatIntrospectResponse
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-FormatIntrospectResponse
+        DisplayName: JS-FormatIntrospectResponse
+        Properties: {}
+        Source: |
+          var tokenFormat = context.getVariable("introspect_token_format");
+          var result = { active: false };
+
+          if (tokenFormat === "jwt") {
+            var isValid = context.getVariable("jwt.JWT-VerifyIntrospectToken.valid") === "true" || context.getVariable("jwt.JWT-VerifyIntrospectToken.valid") === true;
+            if (isValid) {
+              result.active = true;
+              result.sub = context.getVariable("jwt.JWT-VerifyIntrospectToken.claim.subject") || "";
+              result.scope = context.getVariable("jwt.JWT-VerifyIntrospectToken.claim.scope") || "";
+              result.client_id = context.getVariable("jwt.JWT-VerifyIntrospectToken.claim.client_id") || "";
+              result.iss = context.getVariable("jwt.JWT-VerifyIntrospectToken.claim.issuer") || "";
+              result.exp = parseInt(context.getVariable("jwt.JWT-VerifyIntrospectToken.claim.expiry") || "0", 10);
+              result.iat = parseInt(context.getVariable("jwt.JWT-VerifyIntrospectToken.claim.issued_at") || "0", 10);
+              result.token_type = "Bearer";
+            }
+          } else if (tokenFormat === "opaque") {
+            var opaqueDataStr = context.getVariable("opaque_introspect_data");
+            if (opaqueDataStr) {
+              try {
+                var oData = JSON.parse(opaqueDataStr);
+                result.active = true;
+                result.sub = oData.sub || "";
+                result.scope = oData.scope || "";
+                result.client_id = oData.client_id || "";
+                result.iss = oData.iss || "";
+                result.exp = oData.exp || 0;
+                result.iat = oData.iat || 0;
+                result.token_type = "Bearer";
+              } catch (e) {}
+            }
+          }
+
+          context.setVariable("response.content", JSON.stringify(result, null, 2));
+          context.setVariable("response.header.Content-Type", "application/json");
+          context.setVariable("response.status.code", 200);
+
+  - name: JS-ExtractBearerToken
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ExtractBearerToken
+        DisplayName: JS-ExtractBearerToken
+        Properties: {}
+        Source: |
+          var authHeader = context.getVariable("request.header.Authorization") || "";
+          var bearerToken = "";
+          if (authHeader.indexOf("Bearer ") === 0) {
+            bearerToken = authHeader.substring(7).trim();
+          }
+          context.setVariable("bearer_token", bearerToken);
+
+          if (bearerToken.split(".").length === 3) {
+            context.setVariable("userinfo_token_format", "jwt");
+          } else if (bearerToken) {
+            context.setVariable("userinfo_token_format", "opaque");
+          } else {
+            context.setVariable("userinfo_token_format", "none");
+          }
+
+  - name: LC-LookupOpaqueUserInfoToken
+    type: LookupCache
+    content:
+      LookupCache:
+        metadata:
+          name: LC-LookupOpaqueUserInfoToken
+        AssignTo: opaque_userinfo_data
+        CacheKey:
+          Prefix: OAuth21-AccessToken
+          KeyFragment:
+            metadata:
+              ref: bearer_token
+
+  - name: JWT-VerifyUserInfoToken
+    type: VerifyJWT
+    content:
+      VerifyJWT:
+        metadata:
+          continueOnError: "true"
+          enabled: "true"
+          name: JWT-VerifyUserInfoToken
+        Algorithm: HS256
+        IgnoreUnresolvedVariables: "true"
+        SecretKey:
+          Value:
+            metadata:
+              ref: private.jwt_signing_secret
+        Source: bearer_token
+
+  - name: JS-FormatUserInfoResponse
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-FormatUserInfoResponse
+        DisplayName: JS-FormatUserInfoResponse
+        Properties: {}
+        Source: |
+          var tokenFormat = context.getVariable("userinfo_token_format");
+          var valid = false;
+          var sub = "", name = "", email = "", scope = "";
+
+          if (tokenFormat === "jwt") {
+            var jwtValid = context.getVariable("jwt.JWT-VerifyUserInfoToken.valid") === "true" || context.getVariable("jwt.JWT-VerifyUserInfoToken.valid") === true;
+            if (jwtValid) {
+              valid = true;
+              sub = context.getVariable("jwt.JWT-VerifyUserInfoToken.claim.subject") || "";
+              name = context.getVariable("jwt.JWT-VerifyUserInfoToken.claim.name") || "";
+              email = context.getVariable("jwt.JWT-VerifyUserInfoToken.claim.email") || "";
+              scope = context.getVariable("jwt.JWT-VerifyUserInfoToken.claim.scope") || "";
+            }
+          } else if (tokenFormat === "opaque") {
+            var opaqueDataStr = context.getVariable("opaque_userinfo_data");
+            if (opaqueDataStr) {
+              try {
+                var oData = JSON.parse(opaqueDataStr);
+                valid = true;
+                sub = oData.sub || "";
+                name = oData.name || "";
+                email = oData.email || "";
+                scope = oData.scope || "";
+              } catch (e) {}
+            }
+          }
+
+          context.setVariable("userinfo_valid", valid ? "true" : "false");
+          if (valid) {
+            var uObj = { sub: sub, name: name, email: email, scope: scope };
+            context.setVariable("userinfo_response_payload", JSON.stringify(uObj, null, 2));
+          }
+
+  - name: AM-UserInfoResponse
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-UserInfoResponse
+        Set:
+          Payload:
+            metadata:
+              contentType: application/json
+            _text: "{userinfo_response_payload}"
+
+  - name: AM-UserInfoErrorResponse
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-UserInfoErrorResponse
+        Set:
+          StatusCode: "401"
+          ReasonPhrase: Unauthorized
+          Headers:
+            Header:
+              - metadata:
+                  name: WWW-Authenticate
+                _text: 'Bearer error="invalid_token", error_description="Access token is missing, expired, or invalid."'
+          Payload:
+            metadata:
+              contentType: application/json
+            _text: |
+              {
+                "error": "invalid_token",
+                "error_description": "Access token is missing, expired, or invalid."
+              }
+
+  - name: JS-ProcessRevocation
+    type: Javascript
+    content:
+      Javascript:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          timeLimit: "200"
+          name: JS-ProcessRevocation
+        DisplayName: JS-ProcessRevocation
+        Properties: {}
+        Source: |
+          var token = (context.getVariable("request.formparam.token") || "").trim();
+          var hint = (context.getVariable("request.formparam.token_type_hint") || "").trim();
+
+          if (hint === "refresh_token" || token.indexOf("rt_") === 0) {
+            context.setVariable("revoke_token_type", "refresh_token");
+            context.setVariable("refresh_token", token);
+          } else if (hint === "code" || token.indexOf("code_") === 0) {
+            context.setVariable("revoke_token_type", "code");
+            context.setVariable("auth_code", token);
+          } else if (hint === "access_token" || token.indexOf("at_") === 0) {
+            context.setVariable("revoke_token_type", "access_token");
+            context.setVariable("revoke_access_token", token);
+          } else {
+            context.setVariable("revoke_token_type", "other");
+            context.setVariable("revoke_access_token", token);
+            context.setVariable("refresh_token", token);
+          }
+
+  - name: IC-InvalidateRevokedOpaqueAccessToken
+    type: InvalidateCache
+    content:
+      InvalidateCache:
+        metadata:
+          name: IC-InvalidateRevokedOpaqueAccessToken
+        CacheKey:
+          Prefix: OAuth21-AccessToken
+          KeyFragment:
+            metadata:
+              ref: revoke_access_token
+
+  - name: IC-InvalidateRevokedRefreshToken
+    type: InvalidateCache
+    content:
+      InvalidateCache:
+        metadata:
+          name: IC-InvalidateRevokedRefreshToken
+        CacheKey:
+          Prefix: OAuth21-Refresh
+          KeyFragment:
+            metadata:
+              ref: refresh_token
+
+  - name: IC-InvalidateRevokedCode
+    type: InvalidateCache
+    content:
+      InvalidateCache:
+        metadata:
+          name: IC-InvalidateRevokedCode
+        CacheKey:
+          Prefix: OAuth21-Code
+          KeyFragment:
+            metadata:
+              ref: auth_code
+
+  - name: AM-RevokeSuccess
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          name: AM-RevokeSuccess
+        Set:
+          StatusCode: "200"
+          ReasonPhrase: OK
+          Payload:
+            metadata:
+              contentType: application/json
+            _text: |
+              {
+                "status": "revoked"
+              }
+resources: []
+tests: []
