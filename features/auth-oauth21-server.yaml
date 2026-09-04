@@ -39,176 +39,175 @@ parameters:
     displayName: Supported Scopes
     description: Space-separated list of OAuth scopes supported by this server
     default: mcp openid profile email read write
-defaultEndpoint:
-  name: default
-  basePath: /
-  routes:
-    - name: default
-  flows:
-    - name: PreFlow
-      mode: Request
-      steps:
-        - name: CORS-SetCors
-        - name: JS-InitOAuthEnv
+endpoints:
+  - name: oauth
+    basePath: /
+    routes:
+      - name: default
+    flows:
+      - name: PreFlow
+        mode: Request
+        steps:
+          - name: CORS-SetCors
+          - name: JS-InitOAuthEnv
 
-    - name: GET OAuth Protected Resource Metadata
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource") and (request.verb = "GET")
-      steps:
-        - name: JS-BuildProtectedResourceMetadata
+      - name: GET OAuth Protected Resource Metadata
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/.well-known/oauth-protected-resource") and (request.verb = "GET")
+        steps:
+          - name: JS-BuildProtectedResourceMetadata
 
-    - name: GET OAuth Authorization Server Metadata
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/.well-known/oauth-authorization-server") and (request.verb = "GET")
-      steps:
-        - name: JS-BuildAuthServerMetadata
+      - name: GET OAuth Authorization Server Metadata
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/.well-known/oauth-authorization-server") and (request.verb = "GET")
+        steps:
+          - name: JS-BuildAuthServerMetadata
 
-    - name: GET OpenID Configuration
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/.well-known/openid-configuration") and (request.verb = "GET")
-      steps:
-        - name: JS-BuildOidcConfig
+      - name: GET OpenID Configuration
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/.well-known/openid-configuration") and (request.verb = "GET")
+        steps:
+          - name: JS-BuildOidcConfig
 
-    - name: GET JWKS
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/jwks.json") and (request.verb = "GET")
-      steps:
-        - name: JS-BuildJwksResponse
+      - name: GET JWKS
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/jwks.json") and (request.verb = "GET")
+        steps:
+          - name: JS-BuildJwksResponse
 
-    - name: POST Dynamic Client Registration
-      mode: Response
-      condition: ((proxy.pathsuffix MatchesPath "/register") or (proxy.pathsuffix MatchesPath "/register-client")) and (request.verb = "POST")
-      steps:
-        - name: JS-ProcessDCRRequest
-        - name: SC-CreateDeveloper
-          condition: dcr_create_developer = "true"
-        - name: SC-CreateApp
-          condition: dcr_create_app = "true"
-        - name: JS-ProcessDCRResponse
-        - name: PC-StoreClient
-          condition: dcr_success = "true"
-        - name: AM-RegisterSuccess
-          condition: dcr_success = "true"
-        - name: AM-RegisterFailure
-          condition: dcr_success = "false"
+      - name: POST Dynamic Client Registration
+        mode: Response
+        condition: ((proxy.pathsuffix MatchesPath "/register") or (proxy.pathsuffix MatchesPath "/register-client")) and (request.verb = "POST")
+        steps:
+          - name: JS-ProcessDCRRequest
+          - name: SC-CreateDeveloper
+            condition: dcr_create_developer = "true"
+          - name: SC-CreateApp
+            condition: dcr_create_app = "true"
+          - name: JS-ProcessDCRResponse
+          - name: PC-StoreClient
+            condition: dcr_success = "true"
+          - name: AM-RegisterSuccess
+            condition: dcr_success = "true"
+          - name: AM-RegisterFailure
+            condition: dcr_success = "false"
 
-    - name: GET Authorize
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/authorize") and (request.verb = "GET")
-      steps:
-        - name: JS-ExtractAuthorizeParams
-        - name: LC-LookupCIMD
-          condition: is_cimd = "true"
-        - name: SC-FetchCIMD
-          condition: (is_cimd = "true") and (cimd_doc_cached = null)
-        - name: LC-LookupClient
-          condition: is_cimd = "false"
-        - name: SC-GetApigeeApp
-          condition: (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
-        - name: JS-ValidateAuthorize
-        - name: AM-AuthorizeForm
+      - name: GET Authorize
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/authorize") and (request.verb = "GET")
+        steps:
+          - name: JS-ExtractAuthorizeParams
+          - name: LC-LookupCIMD
+            condition: is_cimd = "true"
+          - name: SC-FetchCIMD
+            condition: (is_cimd = "true") and (cimd_doc_cached = null)
+          - name: LC-LookupClient
+            condition: is_cimd = "false"
+          - name: SC-GetApigeeApp
+            condition: (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
+          - name: JS-ValidateAuthorize
+          - name: AM-AuthorizeForm
 
-    - name: POST Authorize / Consent
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/authorize") and (request.verb = "POST")
-      steps:
-        - name: JS-ExtractAuthorizeParams
-        - name: LC-LookupCIMD
-          condition: is_cimd = "true"
-        - name: SC-FetchCIMD
-          condition: (is_cimd = "true") and (cimd_doc_cached = null)
-        - name: LC-LookupClient
-          condition: is_cimd = "false"
-        - name: SC-GetApigeeApp
-          condition: (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
-        - name: JS-ValidateAuthorize
-        - name: JS-AuthenticateAndIssueCode
-          condition: authorize_valid = "true"
-        - name: PC-StoreCode
-          condition: (authorize_valid = "true") and (auth_success = "true")
-        - name: AM-AuthorizeRedirect
-          condition: (authorize_valid = "true") and (auth_success = "true")
-        - name: AM-AuthorizeErrorResponse
-          condition: (authorize_valid = "false") or (auth_success = "false")
+      - name: POST Authorize / Consent
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/authorize") and (request.verb = "POST")
+        steps:
+          - name: JS-ExtractAuthorizeParams
+          - name: LC-LookupCIMD
+            condition: is_cimd = "true"
+          - name: SC-FetchCIMD
+            condition: (is_cimd = "true") and (cimd_doc_cached = null)
+          - name: LC-LookupClient
+            condition: is_cimd = "false"
+          - name: SC-GetApigeeApp
+            condition: (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
+          - name: JS-ValidateAuthorize
+          - name: JS-AuthenticateAndIssueCode
+            condition: authorize_valid = "true"
+          - name: PC-StoreCode
+            condition: (authorize_valid = "true") and (auth_success = "true")
+          - name: AM-AuthorizeRedirect
+            condition: (authorize_valid = "true") and (auth_success = "true")
+          - name: AM-AuthorizeErrorResponse
+            condition: (authorize_valid = "false") or (auth_success = "false")
 
-    - name: POST Token
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/token") and (request.verb = "POST")
-      steps:
-        - name: JS-ExtractTokenParams
-        - name: LC-LookupCode
-          condition: token_grant_type = "authorization_code"
-        - name: LC-LookupRefreshToken
-          condition: token_grant_type = "refresh_token"
-        - name: LC-LookupCIMD
-          condition: (token_grant_type = "client_credentials") and (is_cimd = "true")
-        - name: SC-FetchCIMD
-          condition: (token_grant_type = "client_credentials") and (is_cimd = "true") and (cimd_doc_cached = null)
-        - name: LC-LookupClient
-          condition: (token_grant_type = "client_credentials") and (is_cimd = "false")
-        - name: SC-GetApigeeApp
-          condition: (token_grant_type = "client_credentials") and (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
-        - name: JS-VerifyTokenRequest
-        - name: IC-InvalidateCode
-          condition: (token_grant_type = "authorization_code") and (token_generation_allowed = "true")
-        - name: IC-InvalidateRefreshToken
-          condition: (token_grant_type = "refresh_token") and (token_generation_allowed = "true")
-        - name: JWT-GenerateAccessToken
-          condition: (token_generation_allowed = "true") and (token_format_to_issue = "jwt")
-        - name: JWT-GenerateIDToken
-          condition: (token_generation_allowed = "true") and (token_scope_has_openid = "true")
-        - name: JS-FinalizeTokenResponse
-          condition: token_generation_allowed = "true"
-        - name: PC-StoreOpaqueAccessToken
-          condition: (token_generation_allowed = "true") and (token_format_to_issue = "opaque")
-        - name: PC-StoreRefreshToken
-          condition: token_generation_allowed = "true"
-        - name: AM-TokenResponse
-          condition: token_generation_allowed = "true"
-        - name: AM-TokenErrorResponse
-          condition: (token_generation_allowed = "false") or (token_error != null)
+      - name: POST Token
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/token") and (request.verb = "POST")
+        steps:
+          - name: JS-ExtractTokenParams
+          - name: LC-LookupCode
+            condition: token_grant_type = "authorization_code"
+          - name: LC-LookupRefreshToken
+            condition: token_grant_type = "refresh_token"
+          - name: LC-LookupCIMD
+            condition: (token_grant_type = "client_credentials") and (is_cimd = "true")
+          - name: SC-FetchCIMD
+            condition: (token_grant_type = "client_credentials") and (is_cimd = "true") and (cimd_doc_cached = null)
+          - name: LC-LookupClient
+            condition: (token_grant_type = "client_credentials") and (is_cimd = "false")
+          - name: SC-GetApigeeApp
+            condition: (token_grant_type = "client_credentials") and (is_cimd = "false") and (client_record_cached = null) and (client_id_to_lookup != null)
+          - name: JS-VerifyTokenRequest
+          - name: IC-InvalidateCode
+            condition: (token_grant_type = "authorization_code") and (token_generation_allowed = "true")
+          - name: IC-InvalidateRefreshToken
+            condition: (token_grant_type = "refresh_token") and (token_generation_allowed = "true")
+          - name: JWT-GenerateAccessToken
+            condition: (token_generation_allowed = "true") and (token_format_to_issue = "jwt")
+          - name: JWT-GenerateIDToken
+            condition: (token_generation_allowed = "true") and (token_scope_has_openid = "true")
+          - name: JS-FinalizeTokenResponse
+            condition: token_generation_allowed = "true"
+          - name: PC-StoreOpaqueAccessToken
+            condition: (token_generation_allowed = "true") and (token_format_to_issue = "opaque")
+          - name: PC-StoreRefreshToken
+            condition: token_generation_allowed = "true"
+          - name: AM-TokenResponse
+            condition: token_generation_allowed = "true"
+          - name: AM-TokenErrorResponse
+            condition: (token_generation_allowed = "false") or (token_error != null)
 
-    - name: POST Introspect
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/introspect") and (request.verb = "POST")
-      steps:
-        - name: JS-ExtractIntrospectParams
-        - name: LC-LookupOpaqueIntrospectToken
-          condition: (introspect_token != null) and (introspect_token_format = "opaque")
-        - name: JWT-VerifyIntrospectToken
-          condition: (introspect_token != null) and (introspect_token_format = "jwt")
-        - name: JS-FormatIntrospectResponse
+      - name: POST Introspect
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/introspect") and (request.verb = "POST")
+        steps:
+          - name: JS-ExtractIntrospectParams
+          - name: LC-LookupOpaqueIntrospectToken
+            condition: (introspect_token != null) and (introspect_token_format = "opaque")
+          - name: JWT-VerifyIntrospectToken
+            condition: (introspect_token != null) and (introspect_token_format = "jwt")
+          - name: JS-FormatIntrospectResponse
 
-    - name: GET or POST UserInfo
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/userinfo") and ((request.verb = "GET") or (request.verb = "POST"))
-      steps:
-        - name: JS-ExtractBearerToken
-        - name: LC-LookupOpaqueUserInfoToken
-          condition: (bearer_token != null) and (userinfo_token_format = "opaque")
-        - name: JWT-VerifyUserInfoToken
-          condition: (bearer_token != null) and (userinfo_token_format = "jwt")
-        - name: JS-FormatUserInfoResponse
-          condition: bearer_token != null
-        - name: AM-UserInfoResponse
-          condition: userinfo_valid = "true"
-        - name: AM-UserInfoErrorResponse
-          condition: userinfo_valid = "false"
+      - name: GET or POST UserInfo
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/userinfo") and ((request.verb = "GET") or (request.verb = "POST"))
+        steps:
+          - name: JS-ExtractBearerToken
+          - name: LC-LookupOpaqueUserInfoToken
+            condition: (bearer_token != null) and (userinfo_token_format = "opaque")
+          - name: JWT-VerifyUserInfoToken
+            condition: (bearer_token != null) and (userinfo_token_format = "jwt")
+          - name: JS-FormatUserInfoResponse
+            condition: bearer_token != null
+          - name: AM-UserInfoResponse
+            condition: userinfo_valid = "true"
+          - name: AM-UserInfoErrorResponse
+            condition: userinfo_valid = "false"
 
-    - name: POST Revoke
-      mode: Response
-      condition: (proxy.pathsuffix MatchesPath "/revoke") and (request.verb = "POST")
-      steps:
-        - name: JS-ProcessRevocation
-        - name: IC-InvalidateRevokedOpaqueAccessToken
-          condition: revoke_token_type = "access_token"
-        - name: IC-InvalidateRevokedRefreshToken
-          condition: revoke_token_type = "refresh_token"
-        - name: IC-InvalidateRevokedCode
-          condition: revoke_token_type = "code"
-        - name: AM-RevokeSuccess
-  faultRules: []
-endpoints: []
+      - name: POST Revoke
+        mode: Response
+        condition: (proxy.pathsuffix MatchesPath "/revoke") and (request.verb = "POST")
+        steps:
+          - name: JS-ProcessRevocation
+          - name: IC-InvalidateRevokedOpaqueAccessToken
+            condition: revoke_token_type = "access_token"
+          - name: IC-InvalidateRevokedRefreshToken
+            condition: revoke_token_type = "refresh_token"
+          - name: IC-InvalidateRevokedCode
+            condition: revoke_token_type = "code"
+          - name: AM-RevokeSuccess
+    faultRules: []
 targets: []
 policies:
   - name: CORS-SetCors
