@@ -305,8 +305,7 @@ policies:
           }
 
           var googleCloudProject = context.getVariable("organization.name");
-          var newProject = context.getVariable("request.header.x-project");
-          context.setVariable("ai.googleCloudProject", newProject || googleCloudProject);
+          context.setVariable("ai.googleCloudProject", googleCloudProject);
         IncludeURL: jsc://ai-functions.js
   - name: SC-ModelJudge
     type: ServiceCallout

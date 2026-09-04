@@ -9,7 +9,9 @@ schemaVersion: 1.0.0
 categories:
   - ai
   - traffic
-parameters: []
+parameters:
+  - name: GoogleCloudProject
+    default: "{organization.name}"
 defaultEndpoint:
   name: default
   basePath: /ai-failover
@@ -28,12 +30,36 @@ defaultTarget:
   defaultFaultRule:
     name: default-fault
     steps:
+      - name: AM-SetGoogleToken
+        condition: request.header.Authorization == null
       - name: SC-Failover-GoogleCloud-OAI
       - name: JS-SetFailoverResponse
   faultRules: []
 endpoints: []
 targets: []
 policies:
+  - name: AM-SetGoogleToken
+    type: AssignMessage
+    content:
+      AssignMessage:
+        metadata:
+          continueOnError: "false"
+          enabled: "true"
+          name: AM-SetGoogleToken
+        DisplayName: AM-SetGoogleToken
+        Properties: {}
+        Set:
+          Authentication:
+            HeaderName: Authorization
+            GoogleAccessToken:
+              Scopes:
+                Scope: https://www.googleapis.com/auth/cloud-platform
+        IgnoreUnresolvedVariables: "true"
+        AssignTo:
+          metadata:
+            createNew: "false"
+            transport: http
+            type: request
   - name: SC-Failover-GoogleCloud-OAI
     type: ServiceCallout
     content:
@@ -55,6 +81,8 @@ policies:
               Header:
                 - Name: Content-Type
                   _text: application/json
+                - Name: Authorization
+                  _text: "{request.header.authorization}"
             Payload:
               metadata:
                 contentType: application/json
@@ -72,11 +100,7 @@ policies:
         Response: failoverResponse
         HTTPTargetConnection:
           Properties: {}
-          URL: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/endpoints/openapi/chat/completions
-          Authentication:
-            GoogleAccessToken:
-              Scopes:
-                Scope: https://www.googleapis.com/auth/cloud-platform
+          URL: https://aiplatform.googleapis.com/v1/projects/{GoogleCloudProject}/locations/global/endpoints/openapi/chat/completions
   - name: JS-SetFailoverResponse
     type: Javascript
     content:

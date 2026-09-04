@@ -3,6 +3,9 @@ gateway: apigee
 schemaVersion: 1.0.0
 type: feature
 description: Proxy for Google Cloud Model Garden models.
+parameters:
+  - name: GoogleCloudProject
+    default: "{organization.name}"
 defaultEndpoint:
   name: default
   routes:
@@ -18,7 +21,6 @@ defaultEndpoint:
     - name: default
       target: googlecloud
 endpoints: []
-parameters: []
 targets:
   - name: googlecloud-projects
     url: https://aiplatform.googleapis.com/v1/projects
@@ -29,7 +31,7 @@ targets:
         - name: AM-SetGoogleToken
           condition: request.header.Authorization == null
   - name: googlecloud-oai
-    url: https://aiplatform.googleapis.com/v1/projects/{organization.name}/locations/global/endpoints/openapi/chat/completions
+    url: https://aiplatform.googleapis.com/v1/projects/{GoogleCloudProject}/locations/global/endpoints/openapi/chat/completions
     flows:
       - name: PreFlow
         mode: Request
@@ -37,7 +39,7 @@ targets:
         - name: AM-SetGoogleToken
           condition: request.header.Authorization == null
   - name: googlecloud
-    url: https://aiplatform.googleapis.com/v1/projects/{organization.name}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
+    url: https://aiplatform.googleapis.com/v1/projects/{GoogleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
     flows:
       - name: PreFlow
         mode: Request

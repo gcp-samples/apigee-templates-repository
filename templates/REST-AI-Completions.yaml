@@ -5,12 +5,12 @@ description: API template for REST-AI-Completions
 gateway: apigee
 schemaVersion: 1.0.0
 features:
-  - ../features/ai-endpoint-completions.yaml
-  - ../features/ai-target-googlecloud.yaml
-  - ../features/ai-model-routing.yaml
-  - ../features/auth-apikey-validate.yaml
-  - ../features/ai-model-failover.yaml
-  - ../features/ai-model-analytics.yaml
+  - ai-endpoint-completions.yaml
+  - ai-target-googlecloud.yaml
+  - ai-target-openai.yaml
+  - ai-model-routing.yaml
+  - ai-model-failover.yaml
+  - ai-model-analytics.yaml
 parameters:
   - name: SimpleModel
     default: google/gemini-3.5-flash-lite
@@ -46,8 +46,8 @@ targets:
   - name: anthropic
     url: https://api.anthropic.com
   - name: googlecloud-oai
-    url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/endpoints/openapi/chat/completions
+    url: https://aiplatform.googleapis.com/v1/projects/{GoogleCloudProject}/locations/global/endpoints/openapi/chat/completions
   - name: googlecloud
-    url: https://aiplatform.googleapis.com/v1/projects/{ai.googleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
+    url: https://aiplatform.googleapis.com/v1/projects/{GoogleCloudProject}/locations/global/publishers/{ai.provider}/models/{ai.model}:{ai.method}
   - name: openai
     url: https://api.openai.com
