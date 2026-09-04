@@ -4,7 +4,7 @@
 [![Apigee](https://img.shields.io/badge/Google_Cloud-Apigee-4285F4.svg)](https://cloud.google.com/apigee)
 [![Templates](https://img.shields.io/badge/Templates-117+-green.svg)](#)
 
-Welcome to the **Apigee Templates Repository** — an enterprise catalogue of modular, reusable, and battle-tested Apigee Feature Templater (`aft`) definitions, policy configurations, and cloud integration patterns.
+Welcome to the **Apigee Template Repository** — an enterprise catalogue of modular, reusable, and battle-tested Apigee feature definitions, policy configurations, and cloud integration patterns.
 
 ---
 
@@ -74,9 +74,9 @@ Apigee Templates use a modular, composition-based model where self-contained **F
 ```mermaid
 graph TD
     subgraph Features ["Modular Features (features/*.yaml)"]
-        F1["ai-pre-validate.yaml<br/>• Request validation<br/>• Protocol translation<br/>• Model routing"]
-        F2["ai-completions.yaml<br/>• Target callouts<br/>• Response mediation"]
-        F3["ai-post-analytics.yaml<br/>• Token counting<br/>• Cost calculation<br/>• Analytics DataCapture"]
+        F1["ai-model-routing.yaml<br/>• Request validation<br/>• Protocol translation<br/>• Model routing"]
+        F2["ai-endpoint-completions.yaml<br/>• Target callouts<br/>• Response mediation"]
+        F3["ai-model-analytics.yaml<br/>• Token counting<br/>• Cost calculation<br/>• Analytics DataCapture"]
     end
 
     subgraph Template ["Template Definition (templates/*.yaml)"]
@@ -107,7 +107,7 @@ Every template and feature in this repository includes a dedicated, runnable **J
 ### Zero-Setup Managed Execution with Google Colab
 
 You can run and test any feature without installing any local development tools:
-1. Click the **`Open In Colab`** badge next to any feature in the [Stable Features](#stable-features) or [Draft Features](#draft-extension-features) tables below.
+1. Click the **`Open In Colab`** badge next to any template or feature in the [Stable Features](#stable-features) or [Draft Features](#draft-extension-features) tables below.
 2. Google Colab opens the notebook directly in a managed cloud runtime.
 3. Execute each cell sequentially to authenticate, deploy, and verify the feature.
 
@@ -141,7 +141,7 @@ jupyter lab notebooks/cloud-run-proxy.ipynb
 
 ### 1. Deploy with `gcloud` (Google Cloud CLI)
 
-You can import and deploy Apigee templates directly using `gcloud beta apigee apis import`:
+You can import Apigee templates directly using `gcloud beta apigee apis import`:
 
 ```bash
 gcloud beta apigee apis import REST-AI-Completions \
@@ -153,36 +153,50 @@ gcloud beta apigee apis import REST-AI-Completions \
 
 For installation and setup of the `aft` CLI, visit the official [Apigee Feature Templater Repository](https://github.com/apigee/apigee-templater).
 
-Deploy using the `-o ORG:NAME:ENV:SERVICE_ACCOUNT` option syntax:
+Import and deploy using the `--organization`, `--environment`, and `--service-account` flags:
 
 ```bash
 # Deploy a multi-feature template bundle
-aft templates/REST-AI-Completions.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
+aft templates/REST-AI-Completions.yaml \
+  --organization="$APIGEE_ORG" \
+  --environment="$APIGEE_ENV" \
+  --service-account="$SERVICE_ACCOUNT"
 
-# Or deploy an individual feature definition
-aft features/ai-pre-validate.yaml -o $APIGEE_ORG:$PROXY_NAME:$APIGEE_ENV:$SERVICE_ACCOUNT
+# Or deploy an individual feature definition for feature testing
+aft features/ai-model-routing.yaml \
+  --organization="$APIGEE_ORG" \
+  --environment="$APIGEE_ENV" \
+  --service-account="$SERVICE_ACCOUNT"
 ```
 
 ---
 
-## Stable Features
+## Stable Templates
 
-Stable features available for deployment.
+Production-ready templates available for deployment.
 
-### AI & API Management
+### AI
 
-| Feature | Description | Dependencies | Used in Templates | Colab Notebook |
-|---|---|---|---|---|
-| **`ai-completions`** | Multi-provider Chat Completions API proxy supporting OpenAI, Google Cloud Vertex AI, and Anthropic targets with OpenAPI validation. | `ai-pre-validate`, `ai-post-analytics` | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml), [`REST-AI-GoogleCloud`](templates/REST-AI-GoogleCloud.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Completions.ipynb) |
-| **`ai-failover`** | Intercepts target failures in defaultFaultRule and executes failover routing to Google Cloud Vertex AI OpenAI endpoint. | None (Standalone) | [`REST-AI-GoogleCloud`](templates/REST-AI-GoogleCloud.yaml) | — |
-| **`ai-post-analytics`** | Base AI & LLM response handling with token counting, cost calculation, streaming EventFlow capture, and DataCapture collectors. | None (Standalone) | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml), [`REST-AI-GoogleCloud`](templates/REST-AI-GoogleCloud.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-post-analytics.ipynb) |
-| **`ai-pre-validate`** | Request inspection, cross-format protocol conversion (OpenAI/Anthropic/Gemini), and intelligent model-to-target routing. | None (Standalone) | [`REST-AI-Completions`](templates/REST-AI-Completions.yaml), [`REST-AI-GoogleCloud`](templates/REST-AI-GoogleCloud.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-pre-validate.ipynb) |
-| **`ai-target-anthropic`** | Target endpoint proxy for Anthropic Claude models with KVM credential management and header injection. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-anthropic.ipynb) |
-| **`ai-target-googlecloud`** | Target endpoint proxy for Google Cloud Vertex AI Model Garden models (global endpoint). | None (Standalone) | — | — |
-| **`ai-target-googlecloudeu`** | Target endpoint proxy for Google Cloud Vertex AI Model Garden models (EU regional endpoint). | None (Standalone) | — | — |
-| **`auth-apikey-quota`** | Developer app group verification, token-level LLM quota enforcement, analytics data capture, and unauthorized fault handling. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-key-quota.ipynb) |
-| **`auth-apikey-validate`** | Developer app key validation, header extraction, and IAM token assignment for authorized access. | None (Standalone) | — | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/ai-key-quota.ipynb) |
+#### Google Protocols
+| Template | Description | Features | Colab Notebook |
+|---|---|---|---|
+| **[`REST-AI-Interactions.yaml`](templates/REST-AI-Interactions.yaml)** | Gemini interactions API proxy supporting multi-turn conversational agents, session state management, model routing, and token usage analytics. | [`ai-endpoint-interactions`](features/ai-endpoint-interactions.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-gemini`](features/ai-target-gemini.yaml)<br/>[`ai-model-analytics`](features/ai-model-analytics.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Interactions.ipynb) |
+| **[`REST-AI-GenerateContent.yaml`](templates/REST-AI-GenerateContent.yaml)** | Google Cloud AI and Gemini generateContent API proxy supporting multimodal inputs, streaming responses, and model routing. | [`ai-endpoint-content`](features/ai-endpoint-content.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-gemini`](features/ai-target-gemini.yaml)<br/>[`ai-target-googlecloud`](features/ai-target-googlecloud.yaml)<br/>[`ai-model-analytics`](features/ai-model-analytics.yaml)<br/>[`auth-apikey-validate`](features/auth-apikey-validate.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-GenerateContent.ipynb) |
 
+#### Anthropic Protocols
+| Template | Description | Features | Colab Notebook |
+|---|---|---|---|
+| **[`REST-AI-Messages.yaml`](templates/REST-AI-Messages.yaml)** | Anthropic Claude Messages API proxy providing native `/v1/messages` protocol support with routing between Anthropic API and Google Cloud Vertex AI. | [`ai-endpoint-messages`](features/ai-endpoint-messages.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-anthropic`](features/ai-target-anthropic.yaml)<br/>[`ai-target-googlecloud`](features/ai-target-googlecloud.yaml)<br/>[`ai-model-analytics`](features/ai-model-analytics.yaml)<br/>[`auth-apikey-validate`](features/auth-apikey-validate.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Messages.ipynb) |
+
+#### OAI Protocols
+| Template | Description | Features | Colab Notebook |
+|---|---|---|---|
+| **[`REST-AI-Completions.yaml`](templates/REST-AI-Completions.yaml)** | OAI Multi-provider Chat Completions API proxy supporting OpenAI, Google Cloud, and Anthropic targets with intelligent model routing, failover, token counting, and API key validation. | [`ai-endpoint-completions`](features/ai-endpoint-completions.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-googlecloud`](features/ai-target-googlecloud.yaml)<br/>[`ai-model-failover`](features/ai-model-failover.yaml)<br/>[`ai-model-analytics`](features/ai-model-analytics.yaml)<br/>[`auth-apikey-validate`](features/auth-apikey-validate.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Completions.ipynb) |
+| **[`REST-AI-Audio-Speech.yaml`](templates/REST-AI-Audio-Speech.yaml)** | OAI Text-to-speech  synthesis API proxy routing speech generation requests to OpenAI TTS and Google Cloud Text-to-Speech endpoints with audio format mediation. | [`ai-endpoint-audio-speech`](features/ai-endpoint-audio-speech.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-openai`](features/ai-target-openai.yaml)<br/>[`ai-target-googlecloud`](features/ai-target-googlecloud.yaml)<br/>[`ai-model-analytics`](features/ai-model-analytics.yaml)<br/>[`auth-apikey-validate`](features/auth-apikey-validate.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Audio-Speech.ipynb) |
+| **[`REST-AI-Audio-Transcriptions.yaml`](templates/REST-AI-Audio-Transcriptions.yaml)** | OAI Speech-to-text audio transcription and translation API proxy supporting multipart audio uploads to OpenAI Whisper and Google Cloud Speech APIs. | [`ai-endpoint-audio-transcriptions`](features/ai-endpoint-audio-transcriptions.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-openai`](features/ai-target-openai.yaml)<br/>[`ai-target-googlecloud`](features/ai-target-googlecloud.yaml)<br/>[`ai-model-analytics`](features/ai-model-analytics.yaml)<br/>[`auth-apikey-validate`](features/auth-apikey-validate.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Audio-Transcriptions.ipynb) |
+| **[`REST-AI-Embeddings.yaml`](templates/REST-AI-Embeddings.yaml)** | OAI vector embeddings generation API proxy providing unified text embedding endpoints across OpenAI and Google Cloud Vertex AI embedding models. | [`ai-endpoint-embeddings`](features/ai-endpoint-embeddings.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-openai`](features/ai-target-openai.yaml)<br/>[`ai-target-googlecloud`](features/ai-target-googlecloud.yaml)<br/>[`ai-model-analytics`](features/ai-model-analytics.yaml)<br/>[`auth-apikey-validate`](features/auth-apikey-validate.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Embeddings.ipynb) |
+| **[`REST-AI-Images.yaml`](templates/REST-AI-Images.yaml)** | OAI image generation and editing API proxy routing image creation prompts to OpenAI DALL-E and Google Cloud Imagen targets. | [`ai-endpoint-images`](features/ai-endpoint-images.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-openai`](features/ai-target-openai.yaml)<br/>[`ai-target-googlecloud`](features/ai-target-googlecloud.yaml)<br/>[`ai-model-analytics`](features/ai-model-analytics.yaml)<br/>[`auth-apikey-validate`](features/auth-apikey-validate.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Images.ipynb) |
+| **[`REST-AI-Models.yaml`](templates/REST-AI-Models.yaml)** | OAI Unified AI model catalogue and discovery API proxy aggregating available models across Google Cloud Vertex AI, OpenAI, and Anthropic. | [`ai-endpoint-models`](features/ai-endpoint-models.yaml)<br/>[`ai-model-routing`](features/ai-model-routing.yaml)<br/>[`ai-target-openai`](features/ai-target-openai.yaml)<br/>[`ai-target-googlecloud`](features/ai-target-googlecloud.yaml)<br/>[`ai-target-gemini`](features/ai-target-gemini.yaml)<br/>[`auth-apikey-validate`](features/auth-apikey-validate.yaml) | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/gcp-samples/apigee-templates-repository/blob/main/notebooks/REST-AI-Models.ipynb) |
 ---
 
 ## Draft Extension Features
@@ -394,8 +408,6 @@ Examples:
 This project is licensed under the [Apache 2.0 License](LICENSE).
 
 ---
-
-## Contributors
 
 ## Disclaimer
 
