@@ -5,12 +5,12 @@ description: API template for REST-AI-Completions
 gateway: apigee
 schemaVersion: 1.0.0
 features:
-  - ai-endpoint-completions.yaml
-  - ai-target-googlecloud.yaml
-  - ai-target-openai.yaml
-  - ai-model-routing.yaml
-  - ai-model-failover.yaml
-  - ai-model-analytics.yaml
+  - ../features/ai-endpoint-completions.yaml
+  - ../features/ai-target-googlecloud.yaml
+  - ../features/ai-target-openai.yaml
+  - ../features/ai-model-routing.yaml
+  - ../features/ai-model-failover.yaml
+  - ../features/ai-model-analytics.yaml
 parameters:
   - name: SimpleModel
     default: google/gemini-3.5-flash-lite
